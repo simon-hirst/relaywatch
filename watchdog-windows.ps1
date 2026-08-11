@@ -1,0 +1,25 @@
+param(
+  [string]$ProjectPath = (Get-Location).Path,
+  [string]$Distro = 'Debian',
+  [ValidateSet('run','once','status','inspect','launch-codex','ready','recover-session','show','notify-test','notify-setup','models','model-status','pause','resume','resume-check','unpause','daybreak-continue','daybreak-restored','daybreak-status')][string]$Command = 'run',
+  [ValidateSet('claude','codex')][string]$Agent = 'claude',
+  [switch]$Retry,
+  [switch]$ConfirmComplete,
+  [switch]$AllowStaleHandoff
+)
+$ErrorActionPreference = 'Stop'
+$full = [System.IO.Path]::GetFullPath($ProjectPath)
+if ($full -notmatch '^([A-Za-z]):\\(.*)$') { throw "Expected a Windows drive path: $full" }
+$wslProject = '/mnt/' + $Matches[1].ToLower() + '/' + $Matches[2].Replace('\','/')
+if ($Command -eq 'models' -or $Command -eq 'model-status') {
+  $pickerAction = if ($Command -eq 'models') { 'choose' } else { 'show' }
+  & wsl.exe -d $Distro -- python3 "$wslProject/.agent-watchdog/model_picker.py" $pickerAction
+  if ($LASTEXITCODE -ne 0) { throw "Model picker exited $LASTEXITCODE (previous selection preserved)." }
+  return
+}
+$extraArgs = @()
+if ($Retry) { $extraArgs += '--retry' }
+if ($ConfirmComplete) { $extraArgs += '--confirm-complete' }
+if ($AllowStaleHandoff) { $extraArgs += '--allow-stale-handoff' }
+& wsl.exe -d $Distro -- python3 "$wslProject/.agent-watchdog/watchdog.py" $Command --agent $Agent @extraArgs
+if ($LASTEXITCODE -ne 0) { throw "Watchdog exit $LASTEXITCODE." }

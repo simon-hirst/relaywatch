@@ -1,19 +1,13 @@
 # Changelog
 
-## v1.0.1 — Public release consistency update (2026-10-27)
+## v3.18 — First public source release (2026-10-27)
 
-- Align installation and platform-specific launch instructions with the companion usage project.
-- Add matching Windows, macOS and Linux start scripts without replacing existing entrypoints.
-- Run the Python test suite across both supported CI Python versions on Windows, macOS and Linux.
-- Add a version-tag source release workflow and SHA-256 manifest. No native binaries are implied.
-- Tidy the public-release tests and use the RelayWatch HTTP user agent.
-- Leave quota thresholds, pause/resume, approvals and provider handoff behaviour unchanged.
+- Release the watchdog at the last internal version, **3.18**, rather than starting a separate public version sequence.
+- Support Windows via WSL2 and native macOS/Linux installs with matching platform launchers.
+- Add explicit opt-in for automatic agent launches, unrestricted CLI flags and phone notifications.
+- Keep verified quota handoffs, pause/resume, live model presets and decision notifications.
+- Handle background waits and security-restriction notices without repeated continuation loops.
+- Organise setup, troubleshooting and tests consistently with the companion usage-monitor project.
+- Add cross-platform Python CI, version-tag source archives and SHA-256 checksums.
 
-## v1.0.0 — Initial public source release (2026-10-27)
-
-- Port the local quota monitor to native Linux/macOS with WSL2 support on Windows.
-- Add portable setup, desktop notifications, live model presets and guarded handoffs.
-- Keep automatic launching, unrestricted CLI modes and phone push disabled by default.
-- Preserve the existing managed-session recovery and decision safety checks.
-
-The original release's 43 earlier commits were assembled retrospectively. See [HISTORY.md](HISTORY.md).
+The public packaging work does not change the 80% preparation or 90% handoff thresholds. This is a source release, not a compiled application. The original repository history contains reconstructed commits; see [HISTORY.md](HISTORY.md).

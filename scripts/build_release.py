@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def build(version: str, output_dir: Path, *, root: Path = ROOT) -> list[Path]:
-    if not re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?", version):
-        raise ValueError('Version must look like v1.2.3')
+    if not re.fullmatch(r"v\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9.-]+)?", version):
+        raise ValueError('Version must look like v3.18 or v3.18.0')
     output_dir.mkdir(parents=True, exist_ok=True)
     label = f'relaywatch-{version}'
     assets = []
@@ -39,7 +39,7 @@ def build(version: str, output_dir: Path, *, root: Path = ROOT) -> list[Path]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', required=True, help='Release tag, e.g. v1.0.1')
+    parser.add_argument('--version', required=True, help='Release tag, e.g. v3.18')
     parser.add_argument('--output', type=Path, default=ROOT / 'release-assets')
     args = parser.parse_args()
     for asset in build(args.version, args.output):

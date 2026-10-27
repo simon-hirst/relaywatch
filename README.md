@@ -6,7 +6,7 @@ A local **Windows, macOS and Linux** watchdog for Claude Code and Codex sessions
 
 ## Download and run
 
-Download the source archive from **GitHub → Releases** or clone the repository. Python 3.10+ and `tmux` are required. Both CLIs must already be installed and signed in wherever RelayWatch runs.
+Download the **v3.18** source archive from **GitHub → Releases** or clone the repository. Python 3.10+ and `tmux` are required. Both CLIs must already be installed and signed in wherever RelayWatch runs.
 
 | Operating system | Where it runs | How to start after installation |
 | --- | --- | --- |

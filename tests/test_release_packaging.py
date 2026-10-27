@@ -33,15 +33,15 @@ class TestReleasePackaging(unittest.TestCase):
             subprocess.run(['git', 'add', 'README.md'], cwd=root, check=True)
             subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
                             'commit', '-qm', 'Initial source'], cwd=root, check=True)
-            assets = build('v1.0.1', Path(temp) / 'release-assets', root=root)
+            assets = build('v3.18', Path(temp) / 'release-assets', root=root)
             self.assertEqual(len(assets), 3)
-            self.assertEqual(assets[0].name, 'relaywatch-v1.0.1.zip')
-            self.assertEqual(assets[1].name, 'relaywatch-v1.0.1.tar.gz')
+            self.assertEqual(assets[0].name, 'relaywatch-v3.18.zip')
+            self.assertEqual(assets[1].name, 'relaywatch-v3.18.tar.gz')
             with zipfile.ZipFile(assets[0]) as archive:
-                self.assertIn('relaywatch-v1.0.1/README.md', archive.namelist())
-                self.assertNotIn('relaywatch-v1.0.1/.env', archive.namelist())
+                self.assertIn('relaywatch-v3.18/README.md', archive.namelist())
+                self.assertNotIn('relaywatch-v3.18/.env', archive.namelist())
             with tarfile.open(assets[1], 'r:gz') as archive:
-                self.assertIn('relaywatch-v1.0.1/README.md', archive.getnames())
+                self.assertIn('relaywatch-v3.18/README.md', archive.getnames())
             lines = assets[2].read_text(encoding='utf-8').splitlines()
             self.assertEqual(len(lines), 2)
             for file, line in zip(assets[:2], lines):

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Run the installed monitor on Linux. First argument is the project directory.
+set -euo pipefail
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+project="${1:-$PWD}"
+exec "$here/relaywatch.sh" --project "$project" run

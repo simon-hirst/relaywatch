@@ -122,7 +122,7 @@ def summarise_metrics(metrics):
 def get_api_usage(url, timeout=1.5, used_pct_path=None):
     if not url.startswith('http://127.0.0.1:') and not url.startswith('http://localhost:'):
         raise ValueError('Only local loopback HTTP usage URLs are permitted')
-    req = urllib.request.Request(url,headers={'Accept':'application/json', 'User-Agent':'agent-handoff-watchdog/1.0'})
+    req = urllib.request.Request(url,headers={'Accept':'application/json', 'User-Agent':'RelayWatch/1.0'})
     with urllib.request.urlopen(req,timeout=timeout) as resp:
         if (resp.headers.get('content-length') or '').isdigit() and int(resp.headers['content-length'])>100000:
             raise ValueError('usage API response too large')

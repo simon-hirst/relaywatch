@@ -308,9 +308,18 @@ def check_worker_startup(root, *, now=None, detector=None):
     started=worker.get('started_at')
     if not isinstance(started,(int,float)):
         return None
-    if worker.get('startup_status')=='verified':
+    if worker.get('startup_status') in ('verified', 'unavailable'):
         return None
     now=time.time() if now is None else now
+    # The current process inspector is Linux-/proc-based. macOS has no /proc:
+    # do not mislabel a legitimate interactive session as a failed launch.
+    # Keep its status explicitly unknown until platform-specific evidence exists.
+    if not os.path.isdir('/proc/self'):
+        atomic_write_json(wd(root)/'worker.json',
+                          {**worker,'startup_status':'unavailable',
+                           'startup_checked_at':now,
+                           'startup_failure_reason':'/proc process inspection not supported on this host'})
+        return 'AGENT STARTUP UNVERIFIED: process inspection unavailable; check interactive terminal manually'
     from session_recovery import detect_managed_agent
     evidence,reason=(detector or detect_managed_agent)(root)
     if (evidence and evidence.get('session')==worker.get('session')

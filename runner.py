@@ -274,7 +274,8 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
             return f'FAILED to start {target} interactive tmux: {type(exc).__name__}: {exc}'
         worker={'type':'tmux','session':session,'agent':target,'event_id':event['event_id'],
                 'source_agent':event.get('source'),'handoff_created_at':event.get('created_at'),
-                'started_at':time.time(),'outcome':'launched','pid':None,'window':window}
+                'started_at':time.time(),'outcome':'launched','pid':None,'window':window,
+                'startup_status':'pending','startup_probe_started_at':time.time()}
         atomic_write_json(wd(root)/'worker.json',worker)
         history[event['event_id']]={'target':target,'outcome':'launched','timestamp':worker['started_at'],'session':session}
         atomic_write_json(wd(root)/'launch-history.json',history)
@@ -296,10 +297,12 @@ def can_resume(agent, info, min_remaining=20):
 
 
 def check_worker_startup(root, *, now=None, detector=None):
-    """Verify a real interactive provider process, not merely a tmux shell.
+    """Read-only verification of the recorded managed CLI, including after updates.
 
-    Deliberately retain a failed terminal for diagnosis and never auto-retry an
-    event: an error shell must not be mistaken for a second active coding agent.
+    A process started under an older RelayWatch release is *not* a new launch
+    and must never be marked failed solely because a fresh watchdog poller
+    couldn't match its original argv. Recheck failed/unverified workers when
+    fresh process evidence becomes available; never spawn a replacement.
     """
     root=Path(root).resolve()
     worker=latest_worker(root)
@@ -311,9 +314,6 @@ def check_worker_startup(root, *, now=None, detector=None):
     if worker.get('startup_status') in ('verified', 'unavailable'):
         return None
     now=time.time() if now is None else now
-    # The current process inspector is Linux-/proc-based. macOS has no /proc:
-    # do not mislabel a legitimate interactive session as a failed launch.
-    # Keep its status explicitly unknown until platform-specific evidence exists.
     if not os.path.isdir('/proc/self'):
         atomic_write_json(wd(root)/'worker.json',
                           {**worker,'startup_status':'unavailable',
@@ -321,19 +321,36 @@ def check_worker_startup(root, *, now=None, detector=None):
                            'startup_failure_reason':'/proc process inspection not supported on this host'})
         return 'AGENT STARTUP UNVERIFIED: process inspection unavailable; check interactive terminal manually'
     from session_recovery import detect_managed_agent
-    evidence,reason=(detector or detect_managed_agent)(root)
+    evidence,reason=(detector(root) if detector else
+                     detect_managed_agent(root,expected_window=worker.get('window')))
     if (evidence and evidence.get('session')==worker.get('session')
             and evidence.get('window')==worker.get('window')
             and evidence.get('agent')==worker.get('agent')):
         atomic_write_json(wd(root)/'worker.json',
-                          {**worker,'startup_status':'verified','startup_verified_at':now})
+                          {**worker,'startup_status':'verified',
+                           'startup_verified_at':now,'startup_failure_reason':None})
         from alerts import supersede_handed_off_question
         supersede_handed_off_question(root,worker.get('source_agent'),
                                      worker.get('handoff_created_at'))
         return f'AGENT STARTUP VERIFIED: {worker["agent"]} interactive CLI in {worker["window"]}'
-    if now-started>=60 and worker.get('startup_status')!='failed':
+    # Only launches recorded by the new startup verifier can be declared
+    # failed after their startup grace period. Pre-update and recovered workers
+    # have no such marker: their historical start time is NOT a deadline for
+    # the first poll after an automatic updater restarts the watchdog.
+    probe_start=worker.get('startup_probe_started_at')
+    if not isinstance(probe_start,(int,float)):
+        if worker.get('startup_status')!='unverified':
+            atomic_write_json(wd(root)/'worker.json',
+                              {**worker,'startup_status':'unverified',
+                               'startup_checked_at':now,
+                               'startup_failure_reason':reason or 'legacy managed session not matched'})
+            return ('AGENT SESSION UNVERIFIED: existing '+str(worker['agent'])+
+                    ' tmux session preserved; attach to inspect. No new CLI launched.')
+        return None
+    if now-probe_start>=60 and worker.get('startup_status')!='failed':
         atomic_write_json(wd(root)/'worker.json',
-                          {**worker,'startup_status':'failed','startup_checked_at':now,
+                          {**worker,'startup_status':'failed',
+                           'startup_checked_at':now,
                            'startup_failure_reason':reason or 'no matching interactive CLI process'})
         return ('AGENT STARTUP NOT VERIFIED: tmux window exists, but no matching '
                 f'{worker["agent"]} CLI was found; inspect the terminal. '

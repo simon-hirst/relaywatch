@@ -1,7 +1,8 @@
 param(
   [string]$ProjectPath = (Get-Location).Path,
   [string]$Distro = 'Debian',
-  [switch]$UseSavedModels
+  [switch]$UseSavedModels,
+  [switch]$AutoUpdate
 )
 $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'watchdog-windows.ps1'
@@ -14,5 +15,6 @@ if (-not $UseSavedModels) {
   }
 }
 $arguments = "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$script`" -ProjectPath `"$ProjectPath`" -Distro `"$Distro`""
+if ($AutoUpdate) { $arguments += ' -AutoUpdate' }
 Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments
 Write-Host 'Launched usage watchdog in a separate PowerShell window.'

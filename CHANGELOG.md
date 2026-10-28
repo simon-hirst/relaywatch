@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.18.2 — Opt-in automatic release updates (2026-10-28)
+
+- Add a release-checking supervisor for Windows WSL2, macOS and Linux.
+- Verify each tagged release ZIP against its published SHA-256 checksum before installing.
+- Restart the polling watchdog after an update without restarting active Claude/Codex tmux sessions.
+- Preserve model presets, alert configuration, handoff files and user pauses.
+- Refuse updates when locally modified managed code would be overwritten; leave the existing watcher running on network or verification errors.
+- Keep auto-update opt-in and document its security and operational limitations.
+
+
 ## v3.18.1 — Cross-platform CI and Codex delivery fixes (2026-10-27)
 
 - Fix empty Bash array expansion in the interactive launchers on macOS.

@@ -7,6 +7,7 @@ if [[ ${1:-} == --project ]]; then
 fi
 command="${1:-run}"; shift || true
 case "$command" in
+  auto-update) exec python3 "$project/.agent-watchdog/update_supervisor.py" --project "$project" "$@" ;;
   models|model-status)
     action=choose; [[ $command == model-status ]] && action=show
     exec python3 "$project/.agent-watchdog/model_picker.py" "$action" "$@" ;;

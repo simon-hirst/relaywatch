@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Idempotent repository installer; never clobbers existing agent instructions."""
 from __future__ import annotations
-import argparse,json,re,shlex,shutil,sys,secrets
+import argparse,hashlib,json,re,shlex,shutil,sys,secrets
 from pathlib import Path
 
 SOURCE=Path(__file__).resolve().parent
@@ -252,8 +252,19 @@ def install(project):
     root=project.resolve()
     if not root.is_dir():raise ValueError(f'Project folder does not exist: {root}')
     dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
-    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','background_wait.py','daybreak_watch.py','VERSION'):
+    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
         shutil.copy2(SOURCE/fname,dest/fname)
+    # Updater uses this ledger to avoid overwriting locally modified managed code.
+    code_files = ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py',
+                  'desktop-alert.ps1','interactive-agent.sh','claude_startup.py',
+                  'open-agent-window.ps1','open-agent-window.sh','model_picker.py',
+                  'capacity.py','session_recovery.py','quota_outage.py','session_summary.py',
+                  'console_ui.py','cli_paths.py','codex_steer.py','reset_times.py',
+                  'pause_control.py','resume_agent.py','quota_behavior.py',
+                  'codex_questions.py','claude_questions.py','background_wait.py',
+                  'daybreak_watch.py','update_supervisor.py','VERSION')
+    ledger = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in code_files}
+    (dest/'managed-files.json').write_text(json.dumps(ledger,indent=2,sort_keys=True)+'\n',encoding='utf-8')
     (dest/'README.md').write_text(README_POINTER,encoding='utf-8')
     config_file=dest/'config.json'
     if not config_file.exists():
@@ -366,6 +377,8 @@ verify effective permissions in the CLI if unexpected errors occur.
     ignore=root/'.gitignore'
     block='''# Local RelayWatch runtime (never commit usage/state logs)
 .agent-watchdog/config.json
+.agent-watchdog/managed-files.json
+.agent-watchdog/auto-update.lock
 .agent-watchdog/models.json
 .agent-watchdog/model-catalog-cache.json
 .agent-watchdog/usage-*.json

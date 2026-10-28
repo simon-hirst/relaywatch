@@ -81,6 +81,42 @@ On macOS/Linux use `./relaywatch.sh --project /path/to/project COMMAND`. On Wind
 
 The monitor never assumes that a provider has quota when telemetry is unavailable. It won't override a genuine approval request, start concurrent work during a user pause, or restart an already-running background measurement just to keep a conversation active. Codex Daybreak restrictions generate a reminder, not a blind model or permission toggle. Codex's normal `queue` command **does not deliver into an ongoing turn**. RelayWatch attempts immediate `turn/steer` only for a verified watchdog-owned thread, with an acknowledged running turn on the local daemon; it otherwise queues. A queue success is recorded as *queued*, not *acted on*, and RelayWatch never duplicates an unconfirmed steering request. This applies to RelayWatch's 80%/90% instructions—not arbitrary messages you send from Codex on your phone. Choose **Steer** in the Codex mobile interface when you want your own follow-up to affect the currently running task.
 
+### Automatically install new releases
+
+Auto-update is **opt-in**. Once enabled, RelayWatch checks the latest published
+GitHub release every 15 minutes. It downloads the matching source ZIP and
+`SHA256SUMS.txt`, verifies the SHA-256 digest, and updates only the installed
+watchdog files. It then restarts **the polling watcher**, leaving the current
+Claude/Codex `tmux` session running and preserving your handoff documents,
+model presets, notification settings and pause state. A failed download or
+checksum check does not interrupt monitoring.
+
+Run the installer for **v3.18.2 or later once** to install the updater, then
+launch it using the same project folder as before:
+
+```powershell
+# Windows (PowerShell); runs inside your WSL2 distro
+./start-windows.ps1 -ProjectPath "C:\path\to\project" -UseSavedModels -AutoUpdate
+```
+
+```bash
+# macOS or Linux
+./start-macos.sh /path/to/project --auto-update
+./start-linux.sh /path/to/project --auto-update
+```
+
+Do not start a second normal watchdog alongside the updater. `Ctrl+C` stops the
+supervisor and the polling watcher, **not the coding CLI**. Releases are
+installed only if the managed watchdog code has not been modified locally;
+for modified files, review and install updates manually. Updates require access
+to GitHub and are applied only after a verified release is available.
+
+**Security:** Enabling automatic updates authorises running future code from
+this repository without another prompt. Enable it only if you trust its
+maintainers and GitHub release infrastructure. This is not an operating-system
+service: it works only while the supervisor terminal remains running, and an
+update does not restart the computer or recover a dead terminal.
+
 ## Development
 
 Run from source with Python 3.10+:

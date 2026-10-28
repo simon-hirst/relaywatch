@@ -2,8 +2,9 @@
 param(
     [string]$ProjectPath = (Get-Location).Path,
     [string]$Distro = 'Debian',
-    [switch]$UseSavedModels
+    [switch]$UseSavedModels,
+    [switch]$AutoUpdate
 )
 $ErrorActionPreference = 'Stop'
 $launcher = Join-Path $PSScriptRoot 'start-watchdog-window.ps1'
-& $launcher -ProjectPath $ProjectPath -Distro $Distro -UseSavedModels:$UseSavedModels
+& $launcher -ProjectPath $ProjectPath -Distro $Distro -UseSavedModels:$UseSavedModels -AutoUpdate:$AutoUpdate

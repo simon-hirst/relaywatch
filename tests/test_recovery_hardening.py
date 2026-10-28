@@ -121,8 +121,8 @@ class RecoveryHardeningTests(unittest.TestCase):
         from session_recovery import _interactive_identity
         argv=(b'node\x00/home/simon/.npm-global/lib/node_modules/'
               b'@anthropic-ai/claude-code/cli.js\x00--rc\x00')
-        with patch('session_recovery.os.readlink',return_value=str(self.root)), \\
-             patch('session_recovery.Path.read_bytes',return_value=argv):
+        with (patch('session_recovery.os.readlink',return_value=str(self.root)),
+              patch('session_recovery.Path.read_bytes',return_value=argv)):
             self.assertEqual(_interactive_identity(123,self.root),'claude')
 
     def test_startup_verification_requires_correct_cli_window(self):

@@ -39,18 +39,14 @@ def _interactive_identity(pid: int, root: Path):
         return None
     if not argv or cwd != root:
         return None
-    # Share the exact same binary/wrapper recognition as the active-process
-    # guard. NPM CLIs often execute 'node .../cli.js', not 'node claude.js'.
-    # Still require the provider's interactive remote flags before adoption.
-    agent = _active_cli_kind(argv)
-    if agent == 'codex' and '--remote' in argv and 'unix://' in argv:
-        return 'codex'
-    if agent == 'claude' and '--rc' in argv:
-        return 'claude'
-    return None
+    # The managed tmux pane and its process descendants are authoritative
+    # for interactive identity. Remote-control flags may disappear from the
+    # process argv after CLI upgrades, resume or native wrapper re-exec.
+    # Preserve exact cwd and exclude helper/daemon commands in _active_cli_kind.
+    return _active_cli_kind(argv)
 
 
-def detect_managed_agent(root, *, run=None, walk=None, identify=None):
+def detect_managed_agent(root, *, run=None, walk=None, identify=None, expected_window=None):
     """Examine this project's known tmux session and return unambiguous evidence.
 
     This never adopts a window based on its display name alone. A running CLI
@@ -75,6 +71,11 @@ def detect_managed_agent(root, *, run=None, walk=None, identify=None):
         if len(parts)!=4: continue
         window,title,pid_text,dead=parts
         if dead in ('1','true') or not window.startswith('@'):continue
+        # Startup verification checks only the recorded pane. A separate
+        # window from an earlier agent or unrelated user session must not
+        # make the recorded worker appear missing or ambiguous.
+        if expected_window is not None and window != expected_window:
+            continue
         try:pid=int(pid_text)
         except ValueError:continue
         identities=set()

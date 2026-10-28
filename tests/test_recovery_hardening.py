@@ -104,6 +104,19 @@ class RecoveryHardeningTests(unittest.TestCase):
         self.assertFalse(supersede_handed_off_question(self.root,'codex',205))
         self.assertEqual(load_json(request_path(self.root))['status'],'open')
 
+    def test_old_question_not_superseded_until_receiving_cli_is_verified(self):
+        register_question(self.root,'claude','Should I start v7?',now=100)
+        worker={'agent':'codex','type':'tmux','outcome':'launched',
+                'session':session_name(self.root),'window':'@2',
+                'source_agent':'claude','handoff_created_at':200,'started_at':205}
+        atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
+        missing=lambda root:(None,'only an idle Bash shell')
+        self.assertIn('NOT VERIFIED',check_worker_startup(self.root,now=266,detector=missing))
+        self.assertEqual(load_json(request_path(self.root))['status'],'open')
+        matched=lambda root:({'agent':'codex','session':session_name(self.root),'window':'@2'},None)
+        self.assertIn('STARTUP VERIFIED',check_worker_startup(self.root,now=267,detector=matched))
+        self.assertEqual(load_json(request_path(self.root))['status'],'superseded')
+
     def test_startup_verification_requires_correct_cli_window(self):
         worker={'agent':'codex','type':'tmux','outcome':'launched','session':session_name(self.root),
                 'window':'@2','started_at':100}

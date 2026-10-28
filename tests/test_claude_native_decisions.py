@@ -80,7 +80,10 @@ class NativeClaudeDecisionTests(unittest.TestCase):
 
     def test_unrelated_tools_do_not_generate_decisions(self):
         self.assertIsNone(native_claude_decision({'tool_name':'Bash','tool_input':{'command':'echo x'}}))
-        reply, delivery = self.send('PreToolUse', {'tool_name':'Bash','tool_input':{}})
+        with patch('hook.notify_pending_question') as delivery, \
+             patch('hook.current', return_value={'stage':'normal','stale':False}):
+            reply = hook(self.root,'claude','PreToolUse','claude-managed',
+                         {'tool_name':'Bash','tool_input':{}})
         self.assertEqual(reply, {})
         delivery.assert_not_called()
         self.assertFalse(request_path(self.root).exists())

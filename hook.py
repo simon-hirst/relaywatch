@@ -7,6 +7,7 @@ from engine import PROMPT_HANDOFF, PROMPT_PREP, atomic_write_json, current, hand
 from quota_behavior import premature_quota_wait, premature_wait_correction, work_policy
 from runner import mark_ready, latest_worker, tmux_exists, session_name
 from alerts import detect_question, register_question, clear_question, request_path, is_automatic_continuation, is_auto_stall, notify_pending_question
+from claude_attention import forward as forward_claude_attention
 from capacity import record_manual_turn, record_tool_progress, ERROR as CAPACITY_ERROR
 from quota_outage import directive as outage_directive, fresh_handoff as outage_fresh, qualifies as outage_qualifies, read as outage_read
 from session_summary import current_summary, instructions as summary_instructions
@@ -73,6 +74,22 @@ def hook(root,agent,event,session_id, payload=None):
             return {'continue': False, 'stopReason': PAUSE_MESSAGE}
         if event in ('PostToolUse',):
             return {'continue': False, 'stopReason': PAUSE_MESSAGE}
+        return {}
+    # Permission requests (including background-agent permissions), delayed
+    # Claude agent-needs-input notifications, and MCP forms are separate from
+    # Stop hooks. Forward them before quota polling; never grant permission,
+    # type keys, or create a blocking needs-input.json entry.
+    if agent == 'claude' and event in ('PermissionRequest', 'Notification', 'Elicitation'):
+        worker = latest_worker(root)
+        owned = (worker.get('type') == 'tmux' and worker.get('agent') == 'claude'
+                 and worker.get('outcome') == 'launched'
+                 and worker.get('session') == session_name(root)
+                 and bool(session_id) and tmux_exists(worker['session']))
+        if owned:
+            try:
+                forward_claude_attention(root, config, event, payload or {})
+            except Exception:
+                pass  # Notification failures must never decide a user permission.
         return {}
     # Native question UIs are tool calls, not assistant Stop messages.
     # Catch them before quota polling or long-running processing: no permit

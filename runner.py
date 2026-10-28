@@ -273,14 +273,13 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
         except (OSError,subprocess.TimeoutExpired) as exc:
             return f'FAILED to start {target} interactive tmux: {type(exc).__name__}: {exc}'
         worker={'type':'tmux','session':session,'agent':target,'event_id':event['event_id'],
+                'source_agent':event.get('source'),'handoff_created_at':event.get('created_at'),
                 'started_at':time.time(),'outcome':'launched','pid':None,'window':window}
         atomic_write_json(wd(root)/'worker.json',worker)
         history[event['event_id']]={'target':target,'outcome':'launched','timestamp':worker['started_at'],'session':session}
         atomic_write_json(wd(root)/'launch-history.json',history)
-        # An unresolved decision from the *previous* provider is historical
-        # after its verified handoff. Never treat the handoff as permission.
-        from alerts import supersede_handed_off_question
-        supersede_handed_off_question(root,event.get('source'),event.get('created_at'))
+        # Leave source-provider decisions intact until the receiving CLI is
+        # actually verified running (a newly opened tmux shell is not enough).
         visible=show_agent_window(root,config,target,invoke=invoke)
         return f'CREATED {target} interactive tmux window {window} in {session}; {visible}; verify CLI startup'
 
@@ -319,6 +318,9 @@ def check_worker_startup(root, *, now=None, detector=None):
             and evidence.get('agent')==worker.get('agent')):
         atomic_write_json(wd(root)/'worker.json',
                           {**worker,'startup_status':'verified','startup_verified_at':now})
+        from alerts import supersede_handed_off_question
+        supersede_handed_off_question(root,worker.get('source_agent'),
+                                     worker.get('handoff_created_at'))
         return f'AGENT STARTUP VERIFIED: {worker["agent"]} interactive CLI in {worker["window"]}'
     if now-started>=60 and worker.get('startup_status')!='failed':
         atomic_write_json(wd(root)/'worker.json',

@@ -72,6 +72,9 @@ Your handoff MUST include:
 6. Ordered next tasks with exact files/commands/verification guidance.
 7. Security and operational constraints, including project-specific requirements if relevant.
 8. Which provider should resume next; first instructions for that agent.
+9. The next 3–5 prioritized LOCAL tasks, each with exact file paths or commands,
+   measurable acceptance criteria, and whether explicit permission is required.
+   If no safe tasks remain, list the actual blockers rather than inventing work.
 
 Keep the handoff thorough but navigable. Distinguish facts from assumptions. Verify the saved files exist. Avoid automatic commits, pushes, destructive cleanups, changing settings or deployments without authorization. Do not expose API keys/credentials in handoff documents.
 
@@ -254,6 +257,14 @@ def install(project):
     dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
     for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
         shutil.copy2(SOURCE/fname,dest/fname)
+        # A Windows Git checkout may turn Bash LF endings into CRLF; this
+        # makes 'set -o pipefail' fail before a managed agent can start.
+        # Normalize *only* managed shell scripts before computing the ledger.
+        if fname.endswith('.sh'):
+            script=dest/fname
+            raw=script.read_bytes()
+            if b'\r\n' in raw:
+                script.write_bytes(raw.replace(b'\r\n',b'\n'))
     # Updater uses this ledger to avoid overwriting locally modified managed code.
     code_files = ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py',
                   'desktop-alert.ps1','interactive-agent.sh','claude_startup.py',
@@ -399,6 +410,7 @@ verify effective permissions in the CLI if unexpected errors occur.
 .agent-watchdog/needs-input.json
 .agent-watchdog/alert-delivery.json
 .agent-watchdog/codex-questions.json
+.agent-watchdog/codex-visible-questions.json
 .agent-watchdog/claude-questions.json
 .agent-watchdog/daybreak-recovery.json
 .agent-watchdog/outage-claude.json

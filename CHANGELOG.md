@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.18.3 — Agent handoff and decision alerts hardening (2026-10-28)
+
+- Fix Windows CRLF Bash launch failures by enforcing LF during installation, with launcher syntax checks before a tmux agent window is created.
+- Prevent duplicate launches from outdated ready markers, and distinguish an actual interactive coding agent from a shell-only tmux window.
+- Clear superseded source-agent approval prompts only after a receiving agent has truly started, without granting approval.
+- Improve handoffs with prioritized actionable local tasks and measurable acceptance criteria.
+- Detect Codex user-facing questions without its queued-follow-up indicator, and notify on Claude Code's native AskUserQuestion and ExitPlanMode interactions.
+- Add cross-platform regression coverage for startup, handoff, native questions, and safe notifications.
+- Publish checksummed version releases when VERSION changes on main; opt-in auto-updater verifies assets and restarts only the monitoring process.
+
 ## v3.18.2 — Opt-in automatic release updates (2026-10-28)
 
 - Add a release-checking supervisor for Windows WSL2, macOS and Linux.

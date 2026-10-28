@@ -44,6 +44,7 @@ class OrphanTests(unittest.TestCase):
         self.assertEqual('codex',event['source'])
         self.assertEqual('claude',event['target'])
         def fake_run(args,**kwargs):
+            if args[:2]==['bash','-n']:return SimpleNamespace(returncode=0,stdout='',stderr='')
             if args[:2]==['tmux','has-session']:return SimpleNamespace(returncode=1,stdout='',stderr='')
             if args[:2]==['tmux','new-session']:return SimpleNamespace(returncode=0,stdout='@2\n',stderr='')
             raise AssertionError(args)

@@ -21,6 +21,33 @@ from resume_agent import (mark_received as confirm_manual_resume, RESUME_CONTEXT
                           reports_stale_pause, note_stale_pause)
 
 
+def native_claude_decision(payload):
+    """Summarize native Claude dialogs without selecting or authorizing options.
+
+    PreToolUse:AskUserQuestion fires before Claude opens its multiple-choice
+    terminal UI. ExitPlanMode can likewise request a human plan decision.
+    Unrelated tools and malformed requests must not trigger user alerts.
+    """
+    if not isinstance(payload, dict):
+        return None
+    tool = payload.get('tool_name')
+    if tool == 'AskUserQuestion':
+        data = payload.get('tool_input')
+        questions = data.get('questions') if isinstance(data, dict) else None
+        texts = []
+        if isinstance(questions, list):
+            for item in questions[:4]:
+                q = item.get('question') if isinstance(item, dict) else None
+                if isinstance(q, str) and q.strip():
+                    texts.append(' '.join(q.split())[:300])
+        if texts:
+            return ' | '.join(texts)[:500], 'claude_native_AskUserQuestion'
+        return 'Claude opened an interactive question picker. Respond in the Claude terminal.', 'claude_native_AskUserQuestion'
+    if tool == 'ExitPlanMode':
+        return 'Claude is requesting approval of its plan. Review the plan in the Claude terminal.', 'claude_native_ExitPlanMode'
+    return None
+
+
 def hook(root,agent,event,session_id, payload=None):
     config=load_json(Path(root)/'.agent-watchdog'/'config.json')
     if not config:return {}
@@ -47,6 +74,36 @@ def hook(root,agent,event,session_id, payload=None):
         if event in ('PostToolUse',):
             return {'continue': False, 'stopReason': PAUSE_MESSAGE}
         return {}
+    # Native question UIs are tool calls, not assistant Stop messages.
+    # Catch them before quota polling or long-running processing: no permit
+    # decision is returned, no answer is chosen, and Claude's UI stays in control.
+    if agent == 'claude' and event in ('PreToolUse', 'PostToolUse'):
+        tool_name = (payload or {}).get('tool_name')
+        if tool_name in ('AskUserQuestion', 'ExitPlanMode'):
+            worker = latest_worker(root)
+            owned = (worker.get('type') == 'tmux' and worker.get('agent') == 'claude'
+                     and worker.get('outcome') == 'launched'
+                     and worker.get('session') == session_name(root)
+                     and bool(session_id) and tmux_exists(worker['session']))
+            if owned and event == 'PreToolUse':
+                decision = native_claude_decision(payload)
+                if decision:
+                    question, source = decision
+                    # Register and deliver through the existing deduped ledger.
+                    # Failed channels are still retryable by the poller.
+                    if register_question(root, 'claude', question, source=source):
+                        try:
+                            notify_pending_question(root, config)
+                        except Exception:
+                            pass
+            if owned and event == 'PostToolUse':
+                pending = load_json(request_path(root), {}) or {}
+                if (pending.get('agent') == 'claude'
+                        and pending.get('status') == 'open'
+                        and pending.get('source') == 'claude_native_' + tool_name):
+                    clear_question(root, 'claude')
+            # Don't add unrelated quota guidance to the interaction dialog.
+            return {}
     resume_confirmed=False
     if event=='UserPromptSubmit':
         resume_confirmed=confirm_manual_resume(root,agent,(payload or {}).get('prompt',''))

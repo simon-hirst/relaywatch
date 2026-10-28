@@ -64,6 +64,25 @@ def pending_question(root):
     item = load_json(request_path(root),{}) or {}
     return item if item.get('status') == 'open' and item.get('question') else {}
 
+def supersede_handed_off_question(root, source, handoff_created_at):
+    """Archive only an older decision from a provider that has finished handing off.
+
+    Do not interpret the handoff as approval. Preserve the question in place for
+    auditability. Newer decisions and questions from other agents remain open.
+    """
+    path = request_path(root)
+    item = load_json(path, {}) or {}
+    created = item.get('created_at')
+    if (item.get('status') != 'open' or item.get('agent') != source
+            or not isinstance(created, (int, float))
+            or not isinstance(handoff_created_at, (int, float))
+            or created > handoff_created_at):
+        return False
+    atomic_write_json(path, {**item, 'status': 'superseded',
+                             'superseded_at': time.time(),
+                             'superseded_reason': 'Source provider completed a verified handoff; no permission granted'})
+    return True
+
 
 # A formal one-line marker is the preferred agent/user-decision protocol. The
 # fallback is deliberately narrow: only an unmistakable assistant-addressed

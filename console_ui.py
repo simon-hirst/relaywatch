@@ -232,6 +232,9 @@ class DashboardUI(ConsoleUI):
     def _pending(self):
         if paused(self.root):
             return ('PAUSED BY USER — automation disabled; use -Command resume to continue','yellow')
+        worker=load_json(self.root/'.agent-watchdog'/'worker.json',{}) or {}
+        if worker.get('startup_status')=='failed':
+            return (f'{str(worker.get("agent","Agent")).capitalize()} startup failed — inspect the agent terminal', 'red')
         decision=pending_question(self.root)
         if decision:
             name=str(decision.get('agent','agent')).capitalize()

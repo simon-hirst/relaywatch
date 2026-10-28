@@ -104,6 +104,7 @@ class RecoveryHardeningTests(unittest.TestCase):
         self.assertFalse(supersede_handed_off_question(self.root,'codex',205))
         self.assertEqual(load_json(request_path(self.root))['status'],'open')
 
+    @patch('runner.os.path.isdir', new=lambda path: True)
     def test_old_question_not_superseded_until_receiving_cli_is_verified(self):
         register_question(self.root,'claude','Should I start v7?',now=100)
         worker={'agent':'codex','type':'tmux','outcome':'launched',
@@ -147,6 +148,7 @@ class RecoveryHardeningTests(unittest.TestCase):
               patch('session_recovery.Path.read_bytes',return_value=argv)):
             self.assertEqual(_interactive_identity(123,root),'claude')
 
+    @patch('runner.os.path.isdir', new=lambda path: True)
     def test_startup_verification_requires_correct_cli_window(self):
         worker={'agent':'codex','type':'tmux','outcome':'launched','session':session_name(self.root),
                 'window':'@2','started_at':100}

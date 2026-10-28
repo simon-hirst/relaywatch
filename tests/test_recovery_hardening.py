@@ -117,6 +117,14 @@ class RecoveryHardeningTests(unittest.TestCase):
         self.assertIn('STARTUP VERIFIED',check_worker_startup(self.root,now=267,detector=matched))
         self.assertEqual(load_json(request_path(self.root))['status'],'superseded')
 
+    def test_npm_claude_wrapper_counts_as_real_interactive_cli(self):
+        from session_recovery import _interactive_identity
+        argv=(b'node\x00/home/simon/.npm-global/lib/node_modules/'
+              b'@anthropic-ai/claude-code/cli.js\x00--rc\x00')
+        with patch('session_recovery.os.readlink',return_value=str(self.root)), \\
+             patch('session_recovery.Path.read_bytes',return_value=argv):
+            self.assertEqual(_interactive_identity(123,self.root),'claude')
+
     def test_startup_verification_requires_correct_cli_window(self):
         worker={'agent':'codex','type':'tmux','outcome':'launched','session':session_name(self.root),
                 'window':'@2','started_at':100}

@@ -81,6 +81,28 @@ On macOS/Linux use `./relaywatch.sh --project /path/to/project COMMAND`. On Wind
 
 The monitor never assumes that a provider has quota when telemetry is unavailable. It won't override a genuine approval request, start concurrent work during a user pause, or restart an already-running background measurement just to keep a conversation active. Codex Daybreak restrictions generate a reminder, not a blind model or permission toggle. Codex's normal `queue` command **does not deliver into an ongoing turn**. RelayWatch attempts immediate `turn/steer` only for a verified watchdog-owned thread, with an acknowledged running turn on the local daemon; it otherwise queues. A queue success is recorded as *queued*, not *acted on*, and RelayWatch never duplicates an unconfirmed steering request. This applies to RelayWatch's 80%/90% instructions—not arbitrary messages you send from Codex on your phone. Choose **Steer** in the Codex mobile interface when you want your own follow-up to affect the currently running task.
 
+### Claude permission and subagent alerts
+
+RelayWatch alerts on supported Claude Code native user-attention events, including
+**PermissionRequest** (tool approval), **Notification: agent_needs_input**
+(background agents and agent-team prompts), and **Elicitation** (MCP forms and
+authentication). The delayed `permission_prompt` notification provides a
+fallback, with duplicate suppression. These alerts do not change permission
+modes or answer dialogs. Sensitive command arguments, forms, URLs and secrets
+are never included in notification bodies. Ordinary subagent progress and
+completion are not treated as approval requests.
+
+For **answering from your phone**, use Claude Code's own
+[Remote Control](https://code.claude.com/docs/en/remote-control) on the managed
+Claude session. In the Claude terminal run `/remote-control` (or `/rc`),
+then open the connected session under **Code** in the Claude mobile app.
+Under Claude Code `/config`, enable **Push when actions required** to receive
+Claude's own mobile notifications. RelayWatch can also send its separate
+optional ntfy phone alerts; those alerts do not directly accept answers.
+Remote Control must be available for your Claude account and connected
+to this actual session. A remote-only or cloud session not managed by
+RelayWatch is not monitored by its local hooks.
+
 ### Automatically install new releases
 
 Auto-update is **opt-in**. Once enabled, RelayWatch checks the latest published

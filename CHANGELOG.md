@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.18.4 — Claude side-agent and permission prompts (2026-10-28)
+
+- Alert for Claude Code's immediate tool permission requests, including those from managed background subagents, without automatically approving them.
+- Forward delayed native notifications when an agent/team member needs input, when a permission dialog is waiting, or when an MCP form or authentication dialog requests attention.
+- Detect MCP elicitation hooks immediately, with fallback notification when the prompt remains unanswered.
+- Keep tool commands, form data, URLs, and other sensitive prompt contents out of desktop and phone notification bodies.
+- Suppress duplicate alerts for the same prompt while allowing distinct subagent prompts through; keep these advisory alerts independent of quota-handoff blockers.
+- Install and preserve the new managed Claude-only hooks through normal opt-in release auto-updates.
+- Fix auto-update restart falsely marking a previously running Claude session as failed: reverify its exact tmux window, tolerate CLI wrapper re-exec, and distinguish legacy unverified sessions from genuinely failed new launches.
+- Reattach an existing managed terminal when the poller restarts, without spawning a replacement coding CLI or opening a duplicate when already attached.
+- Document that Claude Remote Control can be used to answer prompts from the Claude mobile app when connected; RelayWatch notifications never act on behalf of the user.
+
 ## v3.18.3 — Agent handoff and decision alerts hardening (2026-10-28)
 
 - Fix Windows CRLF Bash launch failures by enforcing LF during installation, with launcher syntax checks before a tmux agent window is created.

@@ -40,6 +40,36 @@ class ReattachTests(unittest.TestCase):
         # Never overwrites the record once restored.
         self.assertIsNone(recover_worker(self.root,run=self.fake_run))
 
+    def test_startup_verifier_scopes_to_recorded_window_when_other_agents_exist(self):
+        def panes(cmd, **kwargs):
+            if cmd[1]=='has-session':return SimpleNamespace(returncode=0,stdout='',stderr='')
+            if cmd[1]=='list-panes':
+                return SimpleNamespace(returncode=0,stdout='@1\tcodex\t100\t0\n@4\tclaude\t200\t0\n',stderr='')
+            raise AssertionError(cmd)
+        evidence, reason=detect_managed_agent(
+            self.root,run=panes,expected_window='@4',walk=lambda pid:[pid],
+            identify=lambda pid,root:'codex' if pid==100 else 'claude')
+        self.assertIsNone(reason)
+        self.assertEqual(evidence['agent'],'claude')
+        self.assertEqual(evidence['window'],'@4')
+        evidence, reason=detect_managed_agent(
+            self.root,run=panes,walk=lambda pid:[pid],
+            identify=lambda pid,root:'codex' if pid==100 else 'claude')
+        self.assertIsNone(evidence)
+        self.assertIn('found 2',reason)
+
+    def test_cli_without_original_remote_flag_survives_wrapper_reexec(self):
+        from session_recovery import _interactive_identity
+        original_readlink=__import__('os').readlink
+        root=self.root.resolve()
+        def readlink(path):
+            if str(path)=='/proc/880/cwd':return str(root)
+            return original_readlink(path)
+        argv=b'/home/simon/.local/bin/claude\x00--model\x00claude-opus-5-5\x00'
+        with patch('session_recovery.Path.read_bytes',return_value=argv), \
+             patch('session_recovery.os.readlink',side_effect=readlink):
+            self.assertEqual(_interactive_identity(880,root),'claude')
+
     def test_no_live_cli_never_adopts_terminal_title(self):
         answer=recover_worker(self.root,run=self.fake_run,
             walk=lambda pid:[pid],identify=lambda pid,root:None)

@@ -265,6 +265,7 @@ class AutolaunchTests(unittest.TestCase):
         commands=[]
         def fake_run(argv,**kwargs):
             commands.append(argv)
+            if argv[:2]==['bash','-n']:return SimpleNamespace(returncode=0,stderr='',stdout='')
             if argv[1]=='has-session':return SimpleNamespace(returncode=1,stderr='',stdout='')
             if argv[1]=='new-session':return SimpleNamespace(returncode=0,stderr='',stdout='@9\n')
             raise AssertionError('Unexpected second call that depends on a still-living tmux session: '+str(argv))

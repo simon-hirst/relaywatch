@@ -109,7 +109,8 @@ class RecoveryHardeningTests(unittest.TestCase):
         register_question(self.root,'claude','Should I start v7?',now=100)
         worker={'agent':'codex','type':'tmux','outcome':'launched',
                 'session':session_name(self.root),'window':'@2',
-                'source_agent':'claude','handoff_created_at':200,'started_at':205}
+                'source_agent':'claude','handoff_created_at':200,'started_at':205,
+                'startup_probe_started_at':205}
         atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
         missing=lambda root:(None,'only an idle Bash shell')
         self.assertIn('NOT VERIFIED',check_worker_startup(self.root,now=266,detector=missing))
@@ -120,7 +121,7 @@ class RecoveryHardeningTests(unittest.TestCase):
 
     def test_host_without_proc_does_not_claim_agent_crashed(self):
         worker={'agent':'codex','type':'tmux','outcome':'launched',
-                'session':session_name(self.root),'window':'@2','started_at':100}
+                'session':session_name(self.root),'window':'@2','started_at':100,'startup_probe_started_at':100}
         atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
         with patch('runner.os.path.isdir',return_value=False):
             result=check_worker_startup(self.root,now=200,
@@ -129,6 +130,34 @@ class RecoveryHardeningTests(unittest.TestCase):
         self.assertEqual(load_json(self.root/'.agent-watchdog/worker.json')['startup_status'],'unavailable')
         self.assertIsNone(check_worker_startup(self.root,now=300,
                                                detector=lambda root:(None,'cannot inspect')))
+
+    @patch('runner.os.path.isdir', new=lambda path: True)
+    def test_auto_updater_does_not_fail_legacy_running_claude_worker(self):
+        worker={'agent':'claude','type':'tmux','outcome':'launched',
+                'session':session_name(self.root),'window':'@2',
+                'started_at':100,'startup_status':'failed'}
+        atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
+        absent=lambda root:(None,'CLI process args changed after reexec')
+        text=check_worker_startup(self.root,now=4000,detector=absent)
+        self.assertIn('SESSION UNVERIFIED',text)
+        saved=load_json(self.root/'.agent-watchdog/worker.json')
+        self.assertEqual(saved['startup_status'],'unverified')
+        self.assertIsNone(check_worker_startup(self.root,now=4100,detector=absent))
+        recovered=lambda root:({'agent':'claude','session':session_name(self.root),
+                                'window':'@2'},None)
+        text=check_worker_startup(self.root,now=4120,detector=recovered)
+        self.assertIn('STARTUP VERIFIED',text)
+        self.assertEqual(load_json(self.root/'.agent-watchdog/worker.json')['startup_status'],'verified')
+
+    @patch('runner.os.path.isdir', new=lambda path: True)
+    def test_first_poll_of_old_uninspected_claude_worker_not_a_new_failed_launch(self):
+        worker={'agent':'claude','type':'tmux','outcome':'launched',
+                'session':session_name(self.root),'window':'@2','started_at':100}
+        atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
+        text=check_worker_startup(self.root,now=5000,detector=lambda root:(None,'old CLI not recognized'))
+        self.assertIn('SESSION UNVERIFIED',text)
+        self.assertNotIn('STARTUP NOT VERIFIED',text)
+        self.assertEqual(load_json(self.root/'.agent-watchdog/worker.json')['startup_status'],'unverified')
 
     def test_npm_claude_wrapper_counts_as_real_interactive_cli(self):
         from session_recovery import _interactive_identity

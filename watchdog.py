@@ -420,6 +420,23 @@ def inspect(config,agent):
         print('  NONE. Set agents.'+agent+'.used_pct_path in .agent-watchdog/config.json to the correct JSON path.')
 
 
+def reconnect_existing_monitor(root, config):
+    """Only reattach to the known tmux session; never launch another CLI.
+
+    The tmux client guard in show_agent_window prevents a duplicate GUI
+    window when a user is already attached from Windows Terminal or VS Code.
+    """
+    if not config.get('auto_open_terminal_window', True):
+        return None
+    worker=latest_worker(root)
+    if not (worker.get('type')=='tmux' and worker.get('outcome')=='launched'
+            and worker.get('session')==session_name(root)
+            and worker.get('agent') in ('claude','codex')
+            and tmux_exists(worker['session'])):
+        return None
+    return show_agent_window(root, config, worker['agent'])
+
+
 def main():
     parser=argparse.ArgumentParser(description='Local Claude Code + Codex handoff watchdog')
     parser.add_argument('command',nargs='?',choices=('run','once','status','inspect','launch-codex','ready','recover-session','show','notify-test','notify-setup','pause','resume','resume-check','unpause','daybreak-continue','daybreak-restored','daybreak-status'),default='run')
@@ -598,19 +615,9 @@ def main():
         print(handoff_diagnostics(ROOT,config))
         return
     print(f'Watchdog in {ROOT} (Ctrl+C stops watcher; hooks remain installed)',flush=True)
-    # Restarting only the polling watcher after a release must not disconnect,
-    # kill or replace an existing managed tmux CLI. Reopen its terminal only
-    # when no tmux client is currently attached and GUI auto-open is enabled.
-    # show_agent_window verifies the exact checkout session and avoids
-    # duplicate attachments; it NEVER starts a new coding provider.
-    if args.command=='run' and config.get('auto_open_terminal_window',True):
-        existing=latest_worker(ROOT)
-        if (existing.get('type')=='tmux' and existing.get('outcome')=='launched'
-                and existing.get('session')==session_name(ROOT)
-                and existing.get('agent') in ('claude','codex')
-                and tmux_exists(existing['session'])):
-            result=show_agent_window(ROOT,config,existing['agent'])
-            print('EXISTING MANAGED SESSION: '+result,flush=True)
+    if args.command=='run':
+        existing=reconnect_existing_monitor(ROOT,config)
+        if existing:print('EXISTING MANAGED SESSION: '+existing,flush=True)
     try:
         with DashboardUI(ROOT) as ui:
             while True:

@@ -25,7 +25,10 @@ START_PROMPT = (
     'in the interactive session a concise takeover briefing: (1) overall project/phase, '
     '(2) completed milestones with verification status, (3) current/in-progress task, '
     '(4) next two or three priorities, (5) blockers or decisions requiring approval. '
-    'State the exact next task, then say CONTINUE WITH NEXT TASK and implement and test '
+    'If the handoff lists completed work but no concrete next task, first audit the local evidence ' +
+    'and rewrite docs/HANDOFF.md with a prioritized list: file paths, exact verification commands, ' +
+    'acceptance criteria, and which actions require explicit user approval. Never invent progress. ' +
+    'State the exact next safe task, then say CONTINUE WITH NEXT TASK and implement and test '
     'the highest priority unfinished LOCAL task without requiring another user prompt. '
     'After completing that task, CONTINUE AUTOMATICALLY to the next actionable local task. '
     'While usage is below 90% used, DO NOT voluntarily wait for a quota reset if safe tasks remain. '
@@ -219,6 +222,15 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
         prompt_file.write_text(START_PROMPT+'\n',encoding='utf-8')
         script=wd(root)/'interactive-agent.sh'
         if not script.is_file():return 'not launched: interactive-agent.sh missing; reinstall v1.4'
+        # Fail before reserving a tmux window if Git/Windows checkout converted
+        # the managed Bash entrypoint to CRLF (or if any syntax error exists).
+        # A syntactically broken launcher must never be reported as started.
+        try:
+            checked=fn(['bash','-n',str(script)],capture_output=True,text=True,timeout=6)
+        except (OSError,subprocess.TimeoutExpired) as exc:
+            return f'FAILED launcher preflight: {type(exc).__name__}: {exc}'
+        if checked.returncode:
+            return 'FAILED launcher preflight (bash -n): '+str(checked.stderr or checked.stdout or 'invalid Bash syntax')[:300]
         # Bash login environment loads NVM/tool shims; the *outer* bash must
         # survive a fast child exit, so the tmux window remains visible for
         # diagnosis instead of disappearing before we can attach to it.
@@ -263,6 +275,10 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
         atomic_write_json(wd(root)/'worker.json',worker)
         history[event['event_id']]={'target':target,'outcome':'launched','timestamp':worker['started_at'],'session':session}
         atomic_write_json(wd(root)/'launch-history.json',history)
+        # An unresolved decision from the *previous* provider is historical
+        # after its verified handoff. Never treat the handoff as permission.
+        from alerts import supersede_handed_off_question
+        supersede_handed_off_question(root,event.get('source'),event.get('created_at'))
         visible=show_agent_window(root,config,target,invoke=invoke)
         return f'CREATED {target} interactive tmux window {window} in {session}; {visible}; verify CLI startup'
 
@@ -292,11 +308,21 @@ def maybe_launch(root,config,usages,*,now=None):
     handoff=root/'docs'/'HANDOFF.md'
     if not handoff_is_real(root):return None
     history=load_json(wd(root)/'launch-history.json',{}) or {}
+    # Older pending ready markers must not start a second window after a newer
+    # handoff has already launched its recipient. This can otherwise restart
+    # the same provider immediately using a stale event from the prior session.
+    worker=latest_worker(root)
+    worker_started=(worker.get('started_at') if worker.get('session')==session_name(root)
+                    and worker.get('outcome')=='launched' else None)
     candidates=[]
     for source in ('claude','codex'):
         event=load_json(ready_path(root,source),{}) or {}
         if event.get('source')!=source or not event.get('event_id'):continue
         if event['event_id'] in history:continue
+        if (isinstance(worker_started,(int,float))
+                and (not isinstance(event.get('created_at'),(int,float))
+                     or event['created_at'] <= worker_started)):
+            continue
         created=event.get('created_at')
         if not isinstance(created,(int,float)) or now-created<config.get('auto_launch_grace_seconds',10):continue
         # The handoff may receive legitimate edits while awaiting resets.

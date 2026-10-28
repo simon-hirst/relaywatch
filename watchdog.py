@@ -5,7 +5,7 @@ import argparse,json,re,subprocess,sys,time,urllib.request
 from pathlib import Path
 from engine import PROMPT_HANDOFF, PROMPT_PREP, load_json, atomic_write_json, update, state_path, current, handoff_current
 from usage import paths_only, metrics_from_json
-from runner import maybe_launch, explicit_codex, latest_worker, pid_running, tmux_exists, show_agent_window, mark_ready, ready_path, session_name, launch_lock, handoff_is_real
+from runner import maybe_launch, check_worker_startup, explicit_codex, latest_worker, pid_running, tmux_exists, show_agent_window, mark_ready, ready_path, session_name, launch_lock, handoff_is_real
 from alerts import notify_pending_question, send_event, pending_question, is_auto_stall
 from capacity import check as capacity_check, state_path as capacity_state_path
 from session_recovery import recover_worker, detect_managed_agent, active_repository_agents
@@ -240,6 +240,9 @@ def poll(root,config,*,enable_launch=False):
         except Exception as exc:messages.append('capacity recovery failed: '+type(exc).__name__+': '+str(exc))
     started=maybe_launch(root,config,usages) if enable_launch and not user_paused else None
     if started:messages.append('AUTO-HANDOFF '+started)
+    if enable_launch:
+        startup=check_worker_startup(root)
+        if startup:messages.append(startup)
     return messages
 
 

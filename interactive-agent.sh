@@ -44,12 +44,6 @@ except (OSError, ValueError):
     print('no')
 PYCONF
 )"
-claude_permissions=()
-codex_permissions=()
-if [[ "$unrestricted" == yes ]]; then
-  claude_permissions+=(--dangerously-skip-permissions)
-  codex_permissions+=(--yolo)
-fi
 case "$agent" in
   codex)
     # A shared managed app-server is needed for phone remote control.
@@ -59,10 +53,18 @@ case "$agent" in
       exit 3
     fi
     printf 'Codex: %s / %s; interactive TUI, --remote unix:// (permissions from local config)\n' "$model" "$effort"
-    if [[ "$effort" == 'default' ]]; then
-      exec codex --remote unix:// --cd "$PWD" --model "$model" "${codex_permissions[@]}" "$prompt"
+    # Older macOS Bash (3.2) rejects expansion of an empty array under set -u.
+    # Build the two permission modes explicitly instead of using empty arrays.
+    if [[ "$unrestricted" == yes ]]; then
+      if [[ "$effort" == default ]]; then
+        exec codex --remote unix:// --cd "$PWD" --model "$model" --yolo "$prompt"
+      fi
+      exec codex --remote unix:// --cd "$PWD" --model "$model" -c "model_reasoning_effort=\"$effort\"" --yolo "$prompt"
     fi
-    exec codex --remote unix:// --cd "$PWD" --model "$model" -c "model_reasoning_effort=\"$effort\"" "${codex_permissions[@]}" "$prompt"
+    if [[ "$effort" == default ]]; then
+      exec codex --remote unix:// --cd "$PWD" --model "$model" "$prompt"
+    fi
+    exec codex --remote unix:// --cd "$PWD" --model "$model" -c "model_reasoning_effort=\"$effort\"" "$prompt"
     ;;
   claude)
     claude_binary="$(type -P claude || true)"
@@ -92,10 +94,16 @@ case "$agent" in
       printf '[watchdog] No tmux pane detected; Claude will open WITHOUT an automatic first message.\n' >&2
       printf 'Paste: Read docs/HANDOFF.md and continue with the next task.\n' >&2
     fi
-    if [[ "$effort" == 'default' ]]; then
-      exec claude --model "$model" "${claude_permissions[@]}" --rc
+    if [[ "$unrestricted" == yes ]]; then
+      if [[ "$effort" == default ]]; then
+        exec claude --model "$model" --dangerously-skip-permissions --rc
+      fi
+      exec claude --model "$model" --effort "$effort" --dangerously-skip-permissions --rc
     fi
-    exec claude --model "$model" --effort "$effort" "${claude_permissions[@]}" --rc
+    if [[ "$effort" == default ]]; then
+      exec claude --model "$model" --rc
+    fi
+    exec claude --model "$model" --effort "$effort" --rc
     ;;
   *)
     printf 'Invalid agent: %s\n' "$agent" >&2

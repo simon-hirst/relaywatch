@@ -13,9 +13,10 @@ from quota_outage import failed as telemetry_failed, restored as telemetry_resto
 from session_summary import current_summary, instructions as summary_instructions
 from console_ui import ConsoleUI, DashboardUI
 from cli_paths import find_cli, guidance, cli_environment
+from codex_steer import steer as steer_codex, UncertainDelivery
 from pause_control import paused, activate, deactivate, MESSAGE as PAUSE_MESSAGE
 from resume_agent import resume_existing
-from codex_questions import check as check_codex_questions
+from codex_questions import check as check_codex_questions, question_open as codex_question_open
 from claude_questions import check as check_claude_questions
 from daybreak_watch import check as check_daybreak, current as daybreak_current, proceed as daybreak_proceed, restored as daybreak_restored, description as daybreak_description
 
@@ -40,13 +41,16 @@ def handoff_acknowledged_for_usage(root, agent, usage):
 
 
 def queue_codex_if_safe(root, config, usage, *, now=None, run=subprocess.run):
-    """Queue threshold advice into an unambiguously identified Codex thread.
+    """Steer a verified active turn, or queue advice for the managed Codex thread.
 
-    Polling logs are NOT themselves instructions to an agent. At both 80% and
-    90%, explicitly queue model-visible instructions to the managed remote
-    Codex conversation. Never guess an active thread or inject keystrokes.
+    A successful queue request is not immediate delivery. Never infer a thread
+    from the terminal name, duplicate uncertain steers, or override approvals.
     """
     if paused(root) or not config.get('enable_codex_queue', True):
+        return None
+    # Never steer across a pending human approval. Quota Stop hooks can still
+    # complete a safe handoff without authorising the requested operation.
+    if pending_question(root) or codex_question_open(root):
         return None
     stage = usage.get('stage')
     if stage not in ('prepare', 'handoff') or usage.get('stale'):
@@ -62,8 +66,9 @@ def queue_codex_if_safe(root, config, usage, *, now=None, run=subprocess.run):
     prior_path = root / '.agent-watchdog' / 'codex-queued.json'
     prior = load_json(prior_path, {}) or {}
     same_event = prior.get('stage') == stage and prior.get('quota_event') == key
-    # Never send repeated messages once the provider has accepted the queue.
-    if same_event and prior.get('status') == 'ok':
+    delivery = None
+    # A confirmed steer, accepted queue, or ambiguous steer cannot be retried.
+    if same_event and (prior.get('status') == 'ok' or str(prior.get('status', '')).startswith('uncertain:')):
         return None
     # Throttle failures/missing IDs too, otherwise the watchdog emits a new
     # warning every 20 seconds and can flood the Codex app server.
@@ -101,10 +106,20 @@ def queue_codex_if_safe(root, config, usage, *, now=None, run=subprocess.run):
             # necessarily inherit NVM's PATH from the interactive Codex shell.
             # Resolve the binary explicitly rather than assuming bare `codex`
             # is available in the poller's process environment.
-            executable = find_cli('codex')
-            if not executable:
-                result = 'failed: ' + guidance('codex')
+            try:
+                delivered = steer_codex(thread, message)
+            except UncertainDelivery as exc:
+                # Never queue a second copy when the first may have been steered.
+                result = f'uncertain: {exc}'
+                delivery = 'unconfirmed'
             else:
+                if delivered:
+                    result = 'ok'
+                    delivery = 'steered'
+            executable = find_cli('codex') if delivery is None else None
+            if delivery is None and not executable:
+                result = 'failed: ' + guidance('codex')
+            elif delivery is None:
                 cmd = [executable, 'queue', '--remote', 'unix://',
                        '--thread', thread, '--message', message]
                 try:
@@ -112,15 +127,21 @@ def queue_codex_if_safe(root, config, usage, *, now=None, run=subprocess.run):
                              text=True, timeout=12, cwd=root, env=cli_environment(executable))
                     result = ('ok' if cp.returncode == 0 else
                               f'failed (exit {cp.returncode}): {(cp.stderr or cp.stdout)[:220]}')
+                    if cp.returncode == 0: delivery = 'queued'
                 except (OSError, subprocess.TimeoutExpired) as exc:
                     result = f'failed: {type(exc).__name__}: {exc}'
     atomic_write_json(prior_path, {
         'status': result, 'session': thread, 'stage': stage,
         'quota_event': key, 'last_attempt': now,
+        'delivery': delivery,
     })
     prefix = 'PREP (80%)' if stage == 'prepare' else 'FINAL HANDOFF (90%)'
     if result == 'ok':
-        return f'CODEX {prefix} MESSAGE QUEUED to thread {thread} (remote unix://)'
+        if delivery == 'steered':
+            return f'CODEX {prefix} MESSAGE STEERED into active turn on thread {thread}'
+        return f'CODEX {prefix} MESSAGE QUEUED (NOT IMMEDIATE) to thread {thread} (remote unix://)'
+    if result.startswith('uncertain:'):
+        return f'CODEX {prefix} DELIVERY UNCONFIRMED; NOT RETRYING: {result}'
     return f'CODEX {prefix} MESSAGE NOT DELIVERED: {result}'
 
 

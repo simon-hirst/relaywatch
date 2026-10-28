@@ -1,102 +1,103 @@
 # RelayWatch
 
-A local **Windows, macOS and Linux** watchdog for Claude Code and Codex sessions. It reads the two local usage APIs, prepares a handoff as quotas run low and can switch to the other provider after a verified handoff. Desktop and optional phone alerts tell you when an agent needs an answer.
+A cross-platform watchdog for Claude Code and Codex. Track usage limits, hand off work before a quota runs out, and get notified when an agent needs your decision.
 
-**The default installation only monitors.** Automatic launching and unrestricted CLI flags are opt-in. Review the workspace and the existing project instructions before enabling them.
+**Windows (WSL2) · macOS · Linux**
+
+[**Download the latest release**](https://github.com/simon-hirst/relaywatch/releases/latest) · [Report an issue](https://github.com/simon-hirst/relaywatch/issues)
+
+## Overview
+
+RelayWatch runs locally alongside your coding CLI sessions. It monitors verified five-hour and weekly quota readings and can coordinate an orderly handoff between providers when a session approaches its limit.
+
+- **Quota-aware:** live usage and local reset times, without invented allowances or reset dates.
+- **Handoffs:** prepare at 80% used; complete and verify the handoff at 90% used.
+- **Codex delivery:** steer live threshold instructions through the verified local Codex daemon when supported, otherwise queue them and clearly report the delay.
+- **Questions:** desktop and optional ntfy phone notifications when approval or input is required.
+- **Safe pauses:** a user pause takes priority over automatic continuation.
+- **Live presets:** change the model and effort for the *next* launch using **Shift+M**.
+- **Terminal-based:** the current agent stays in an interactive `tmux` session; there is no hosted service.
+
+**New installations monitor only by default.** Automatic agent launches and permission-bypass flags require explicit opt-in. RelayWatch does not answer approval requests, commit changes or deploy on your behalf.
+
+## Architecture
+
+The monitor and both CLIs run in the same Unix environment: native Linux/macOS, or WSL2 on Windows.
+
+| Component | Source | Description |
+| --- | --- | --- |
+| Supervisor | [`watchdog.py`](watchdog.py), [`engine.py`](engine.py) | Polls quotas and coordinates verified handoffs. |
+| Interactive sessions | [`runner.py`](runner.py), [`interactive-agent.sh`](interactive-agent.sh) | Starts and observes CLI sessions through `tmux`. |
+| Hooks and decisions | [`hook.py`](hook.py), [`pause_control.py`](pause_control.py) | Detects questions, pauses, background work and handoff readiness. |
+| Usage and reset times | [`usage.py`](usage.py), [`reset_times.py`](reset_times.py) | Validates local readings and formats their reported reset instants. |
+| Notifications | [`alerts.py`](alerts.py) | Windows/macOS/Linux desktop alerts and optional ntfy push. |
+| Tests and releases | [`.github/workflows/`](.github/workflows/) | CI checks and tagged source archives with SHA-256 checksums. |
+
+RelayWatch reads existing **local** usage APIs on `127.0.0.1:3789/get` (Codex) and `127.0.0.1:3790/get` (Claude). Those backends are **not included**: supply compatible readers, such as the ones in [Provider Usage Tray](https://github.com/simon-hirst/agent-usage), and authenticate both CLIs yourself.
 
 ## Download and run
 
-Download the **v3.18** source archive from **GitHub → Releases** or clone the repository. Python 3.10+ and `tmux` are required. Both CLIs must already be installed and signed in wherever RelayWatch runs.
+Download the [latest source release](https://github.com/simon-hirst/relaywatch/releases/latest) or clone this repository. These are **source distributions, not prebuilt executables**. You'll need Python 3.10+, `tmux`, and logged-in Claude Code/Codex CLIs.
 
-| Operating system | Where it runs | How to start after installation |
+| Platform | Install into your project | Start monitoring |
 | --- | --- | --- |
-| Windows 10/11 | WSL2 (`Debian` by default) | `./start-windows.ps1 -ProjectPath "C:\path\to\project" -UseSavedModels` |
-| macOS | Native terminal | `./start-macos.sh /path/to/project` |
-| Linux | Native terminal | `./start-linux.sh /path/to/project` |
+| Windows 10/11 (WSL2) | `./install-windows.ps1 -ProjectPath "C:\path\to\project" -Distro Debian` | `./start-windows.ps1 -ProjectPath "C:\path\to\project" -UseSavedModels` |
+| macOS | `./install.sh /path/to/project` | `./start-macos.sh /path/to/project` |
+| Linux | `./install.sh /path/to/project` | `./start-linux.sh /path/to/project` |
 
-On Windows, start commands above are run in **PowerShell**, and you need a configured WSL2 distribution. The Windows launcher opens a separate PowerShell window running the monitor; the managed agent uses a WSL `tmux` session. On macOS, install `tmux` with Homebrew if needed; on Linux, use your distribution's package manager.
+Run the Windows commands in **PowerShell**. Install Claude, Codex, Python 3 and `tmux` inside the chosen WSL2 distro (Debian by default), not in Windows Python. On macOS/Linux the native CLI logins are used. Install `tmux` with Homebrew or your Linux package manager.
 
-The launchers do **not** install hooks automatically. Install RelayWatch into the project first, as shown below. macOS/Linux launch and alert paths have automated tests, but haven't been verified on every native terminal.
+Install hooks before starting the monitor. The installer preserves unrelated project instructions, existing handoffs and session state; it keeps generated runtime files out of source control. It does **not** take control of an existing agent until the user opts in.
 
-## Install into a project
+### Enable automatic handoffs
 
-Run from the extracted repository directory. The installer adds managed hooks and workflow sections without replacing unrelated project instructions.
-
-| OS | Command |
-| --- | --- |
-| Windows (PowerShell) | `./install-windows.ps1 -ProjectPath "C:\path\to\project" -Distro Debian` |
-| macOS / Linux | `./install.sh /path/to/project` |
-
-Set up the two usage sources before enabling automatic switching. The default local endpoints are `http://127.0.0.1:3789/get` for Codex and `http://127.0.0.1:3790/get` for Claude. RelayWatch **does not bundle** the servers; provide compatible endpoints from your own usage readers (not included in this repository).
-
-Check the current quotas and select the model presets:
+The default configuration tracks quotas without starting another agent. To opt in explicitly:
 
 ```bash
-./relaywatch.sh --project /path/to/project once
-./relaywatch.sh --project /path/to/project models
-```
-
-For Windows PowerShell:
-
-```powershell
-./watchdog-windows.ps1 -ProjectPath "C:\path\to\project" -Command once
-./watchdog-windows.ps1 -ProjectPath "C:\path\to\project" -Command models
-```
-
-### Automatic handoffs (optional)
-
-To allow RelayWatch to launch the next agent after a verified handoff, reinstall with explicit opt-in:
-
-```bash
+# macOS or Linux
 ./install.sh /path/to/project --enable-auto-launch
 ```
 
-For Windows, pass `-EnableAutoLaunch` to `install-windows.ps1`. An additional `--unrestricted` / `-Unrestricted` option enables CLI permission-bypass flags. **Only enable unrestricted mode in repositories you trust.** Agent instructions to avoid pushes, commits and deployments are not a security boundary.
+```powershell
+# Windows PowerShell
+./install-windows.ps1 -ProjectPath "C:\path\to\project" -EnableAutoLaunch
+```
 
-New installs store configuration in the target project's `.agent-watchdog/config.json`. You can change the local usage endpoints, notification settings and launch policy there. The installer excludes generated configuration, session state, handoffs and notification topics from the project's Git tracking.
+You can also opt into unrestricted CLI execution with `--unrestricted` or `-Unrestricted`. **Only use this for repositories you trust.** Permission-bypass flags change the CLI's security posture, and written agent instructions are not a security boundary.
 
-## Usage and controls
-
-- **Quota monitoring:** the watchdog polls both five-hour and weekly allowances every 20 seconds, using only verified values. Missing reset timestamps are displayed as unknown.
-- **80% used:** tell the active agent to prepare its handoff and session report while it finishes bounded, safe local work.
-- **90% used:** stop feature work and finish the handoff. The next provider starts only once the handoff is complete and its quota permits it.
-- **Questions:** a formal `USER_DECISION_REQUEST:` or `NEEDS_USER_INPUT:` triggers desktop notification and, if configured, an ntfy push. Answers and approvals are never assumed.
-- **Background jobs:** an agent can wait for a running external test without being mistaken for a user question.
-- **Pause/resume:** a persistent marker blocks automatic work until you explicitly resume; normal task completion is not a reason to override a pause.
-- **Live models:** press **Shift+M** in the monitoring terminal to change the next launch's model/effort without restarting the watchdog.
-- **Daybreak:** Codex restriction notices trigger a guarded recovery reminder. RelayWatch does not blindly toggle Daybreak or change an existing interactive model.
+### Usage and controls
 
 | Command | What it does |
 | --- | --- |
-| `run` | Monitor continuously |
-| `once` | Fetch and print the current quotas |
-| `status` | Show worker status, handoffs, questions and notification results |
-| `models` | Choose the next model and effort presets |
-| `pause` | Block automatic continuation and new launches |
-| `resume-check` | Check whether the existing session can safely resume |
-| `resume` | Clear the pause and attempt guarded continuation |
-| `notify-setup` | Configure a private ntfy topic |
-| `notify-test` | Check desktop and phone notification delivery |
+| `run` | Monitor continuously. |
+| `once` | Read the current quota limits. |
+| `status` | Inspect the active worker, handoffs, questions and alert delivery. |
+| `models` | Choose model/effort presets for the next session. |
+| `pause`, `unpause`, `resume` | Hold automatic work, clear the hold, or safely resume an idle worker. |
+| `resume-check` | Inspect whether continuation is safe, without sending a message. |
+| `notify-setup`, `notify-test` | Configure and test desktop/phone notifications. |
 
-Run these with `./relaywatch.sh --project PATH COMMAND` on macOS/Linux, or `./watchdog-windows.ps1 -ProjectPath PATH -Command COMMAND` in PowerShell. Use `./start-linux.sh`, `./start-macos.sh` or `./start-windows.ps1` to launch the continuous monitor.
+On macOS/Linux use `./relaywatch.sh --project /path/to/project COMMAND`. On Windows use `./watchdog-windows.ps1 -ProjectPath "C:\path\to\project" -Command COMMAND`.
 
-## Privacy and limitations
+The monitor never assumes that a provider has quota when telemetry is unavailable. It won't override a genuine approval request, start concurrent work during a user pause, or restart an already-running background measurement just to keep a conversation active. Codex Daybreak restrictions generate a reminder, not a blind model or permission toggle. Codex's normal `queue` command **does not deliver into an ongoing turn**. RelayWatch attempts immediate `turn/steer` only for a verified watchdog-owned thread, with an acknowledged running turn on the local daemon; it otherwise queues. A queue success is recorded as *queued*, not *acted on*, and RelayWatch never duplicates an unconfirmed steering request. This applies to RelayWatch's 80%/90% instructions—not arbitrary messages you send from Codex on your phone. Choose **Steer** in the Codex mobile interface when you want your own follow-up to affect the currently running task.
 
-- Runtime config, notification topics, CLI authentication and project handoff documents stay **out of this source repository**. Do not commit files from a project's `.agent-watchdog/` folder.
-- ntfy is opt-in. Subscribe to the generated private topic on your phone before enabling delivery.
-- Windows uses WSL2 rather than a native Windows Python daemon. Codex Remote Control requires a working local Unix socket; Claude Remote Control uses its own CLI.
-- Hook-based enforcement only runs when the relevant hook runs. RelayWatch cannot guarantee it will interrupt an already-running process or override a provider's own limits.
-- Quota endpoints and interactive CLI capabilities can change between provider releases. See [SECURITY.md](SECURITY.md) for trust boundaries.
+## Development
 
-## Running from source (developers)
-
-No third-party Python packages are needed for the monitor or test suite.
+Run from source with Python 3.10+:
 
 ```bash
+# Full supervisor suite, in Linux, macOS or WSL2
 python3 -m unittest discover -s tests -v
-python3 -m compileall -q .
+
+# Native Windows portability tests (supervision runs in WSL2)
+python -m unittest discover -s tests -p 'test_portable_windows.py' -v
+python -m unittest discover -s tests -p 'test_release_packaging.py' -v
 ```
 
-The [GitHub Actions test workflow](.github/workflows/ci.yml) runs the suite on Windows, macOS and Linux. Version tags also publish source archives and SHA-256 checksums; these are **not** standalone executables. See [CHANGELOG.md](CHANGELOG.md) for release notes and [HISTORY.md](HISTORY.md) for the explicitly reconstructed historical commit metadata.
+The [CI workflow](.github/workflows/ci.yml) runs the Unix supervisor suite on Linux/macOS, Windows-native smoke tests on Windows, and Python syntax checks on all platforms. Version tags (`v*`) publish [source archives](.github/workflows/release.yml) and SHA-256 checksums, not native application binaries.
 
-MIT licensed. Unaffiliated with the listed CLI providers.
+## Contributing
+
+Issues and pull requests are welcome, especially for CLI compatibility, supported terminal environments, and notification reliability. Include the operating system, CLI versions and relevant error output, and **remove tokens, session identifiers and other secrets** from logs before sharing them.
+
+MIT licensed. RelayWatch is an independent project, unaffiliated with the providers it monitors. See [SECURITY.md](SECURITY.md) for trust boundaries, [CHANGELOG.md](CHANGELOG.md) for changes and [HISTORY.md](HISTORY.md) for the disclosed reconstructed history of earlier commits.

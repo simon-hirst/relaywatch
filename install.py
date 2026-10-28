@@ -252,7 +252,7 @@ def install(project):
     root=project.resolve()
     if not root.is_dir():raise ValueError(f'Project folder does not exist: {root}')
     dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
-    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','background_wait.py','daybreak_watch.py','VERSION'):
+    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','background_wait.py','daybreak_watch.py','VERSION'):
         shutil.copy2(SOURCE/fname,dest/fname)
     (dest/'README.md').write_text(README_POINTER,encoding='utf-8')
     config_file=dest/'config.json'

@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.18.1 — Cross-platform CI and Codex delivery fixes (2026-10-27)
+
+- Fix empty Bash array expansion in the interactive launchers on macOS.
+- Correct macOS temporary-path test expectations for `/var` and `/private/var`.
+- Run the Unix supervisor suite on supported Unix hosts, with portable native Windows smoke tests.
+- Align project documentation with the companion Provider Usage Tray README.
+- Steer managed Codex quota-threshold messages through its local daemon when acknowledged; report queued fallbacks explicitly and never resend an unconfirmed steer.
+- Add focused steering, duplicate-prevention and native-Windows portability tests.
+
 ## v3.18 — First public source release (2026-10-27)
 
 - Release the watchdog at the last internal version, **3.18**, rather than starting a separate public version sequence.

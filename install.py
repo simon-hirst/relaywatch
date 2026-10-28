@@ -410,6 +410,7 @@ verify effective permissions in the CLI if unexpected errors occur.
 .agent-watchdog/needs-input.json
 .agent-watchdog/alert-delivery.json
 .agent-watchdog/codex-questions.json
+.agent-watchdog/codex-visible-questions.json
 .agent-watchdog/claude-questions.json
 .agent-watchdog/daybreak-recovery.json
 .agent-watchdog/outage-claude.json

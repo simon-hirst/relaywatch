@@ -39,14 +39,13 @@ def _interactive_identity(pid: int, root: Path):
         return None
     if not argv or cwd != root:
         return None
-    # Native binary, shell-installed wrapper or node-launched CLI package.
-    first = Path(argv[0]).name.lower()
-    others = [Path(x).stem.lower() for x in argv[1:3]]
-    claude_cli = first in ('claude', 'claude.exe') or (first in ('node', 'node.exe') and 'claude' in others)
-    codex_cli = first in ('codex', 'codex.exe') or (first in ('node', 'node.exe') and 'codex' in others)
-    if codex_cli and '--remote' in argv and 'unix://' in argv:
+    # Share the exact same binary/wrapper recognition as the active-process
+    # guard. NPM CLIs often execute 'node .../cli.js', not 'node claude.js'.
+    # Still require the provider's interactive remote flags before adoption.
+    agent = _active_cli_kind(argv)
+    if agent == 'codex' and '--remote' in argv and 'unix://' in argv:
         return 'codex'
-    if claude_cli and '--rc' in argv:
+    if agent == 'claude' and '--rc' in argv:
         return 'claude'
     return None
 

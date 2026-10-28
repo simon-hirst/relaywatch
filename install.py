@@ -255,7 +255,7 @@ def install(project):
     root=project.resolve()
     if not root.is_dir():raise ValueError(f'Project folder does not exist: {root}')
     dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
-    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
+    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','claude_attention.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
         shutil.copy2(SOURCE/fname,dest/fname)
         # A Windows Git checkout may turn Bash LF endings into CRLF; this
         # makes 'set -o pipefail' fail before a managed agent can start.
@@ -380,7 +380,10 @@ verify effective permissions in the CLI if unexpected errors occur.
     q=shlex.quote
     for agent,path in (('claude',root/'.claude'/'settings.local.json'),('codex',root/'.codex'/'hooks.json')):
         cmd=f'python3 {q(str(dest / "hook.py"))} --agent {agent} --project {q(str(root))}'
-        merge_hook_file(path,cmd,('SessionStart','PreToolUse','PostToolUse','UserPromptSubmit','Stop'))
+        events=('SessionStart','PreToolUse','PostToolUse','UserPromptSubmit','Stop')
+        if agent=='claude':
+            events+=('PermissionRequest','Notification','Elicitation')
+        merge_hook_file(path,cmd,events)
     # Do not forcibly overwrite project-level user model preferences on install.
     # Model/effort choices for *managed* launches are selected at runtime by
     # model_picker.py, stored separately from project/CLI global settings.
@@ -412,6 +415,7 @@ verify effective permissions in the CLI if unexpected errors occur.
 .agent-watchdog/codex-questions.json
 .agent-watchdog/codex-visible-questions.json
 .agent-watchdog/claude-questions.json
+.agent-watchdog/claude-attention.json
 .agent-watchdog/daybreak-recovery.json
 .agent-watchdog/outage-claude.json
 .agent-watchdog/outage-codex.json

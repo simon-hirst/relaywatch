@@ -1,0 +1,70 @@
+name: Publish verified version changes
+
+# A version bump merged to main publishes a checked source release.
+# Tags created by GITHUB_TOKEN do not retrigger Actions workflows,
+# so tag and release must be published by this single job.
+on:
+  push:
+    branches: [main]
+    paths:
+      - VERSION
+
+permissions:
+  contents: read
+
+concurrency:
+  group: version-release-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out exact main revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check entire Python test suite
+        run: python -m unittest discover -s tests -q
+      - name: Check Python and Bash syntax
+        run: |
+          python -m compileall -q .
+          bash -n install.sh relaywatch.sh start-linux.sh start-macos.sh interactive-agent.sh
+      - name: Build and publish verified source release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'VERSION must be a three-part numeric release version' >&2
+            exit 1
+          fi
+          tag="v${version}"
+          python scripts/build_release.py --version "$tag"
+
+          # Never move a published tag, including when retrying failed jobs.
+          if existing="$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$existing" != "$GITHUB_SHA" ]]; then
+              echo "Existing tag $tag points elsewhere; refusing release" >&2
+              exit 1
+            fi
+          else
+            gh api -X POST "repos/${GH_REPO}/git/refs" \
+              -f "ref=refs/tags/${tag}" -f "sha=${GITHUB_SHA}" >/dev/null
+          fi
+
+          if gh release view "$tag" --json tagName --jq '.tagName' >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing duplicate publication."
+            exit 0
+          fi
+          gh release create "$tag" release-assets/* \
+            --verify-tag --title "RelayWatch $tag" --generate-notes

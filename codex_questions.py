@@ -213,7 +213,8 @@ def check_visible_decision(root, screen, *, now):
     previous = load_json(request_path(root), {}) or {}
     already_answered = (previous.get('agent') == 'codex'
                         and previous.get('question') == question
-                        and previous.get('status') in ('answered', 'acknowledged', 'superseded'))
+                        and previous.get('status') in ('answered', 'acknowledged', 'superseded')
+                        and old.get('signature') != signature)
     fresh = False
     if not already_answered:
         fresh = register_question(root, 'codex', question, now=now, source=origin)

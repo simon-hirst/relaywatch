@@ -152,7 +152,7 @@ class RecoveryHardeningTests(unittest.TestCase):
     @patch('runner.os.path.isdir', new=lambda path: True)
     def test_first_poll_of_old_uninspected_claude_worker_not_a_new_failed_launch(self):
         worker={'agent':'claude','type':'tmux','outcome':'launched',
-                'session':session_name(self.root),'window':'@2','started_at':100,'startup_probe_started_at':100}
+                'session':session_name(self.root),'window':'@2','started_at':100}
         atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
         text=check_worker_startup(self.root,now=5000,detector=lambda root:(None,'old CLI not recognized'))
         self.assertIn('SESSION UNVERIFIED',text)
@@ -180,7 +180,7 @@ class RecoveryHardeningTests(unittest.TestCase):
     @patch('runner.os.path.isdir', new=lambda path: True)
     def test_startup_verification_requires_correct_cli_window(self):
         worker={'agent':'codex','type':'tmux','outcome':'launched','session':session_name(self.root),
-                'window':'@2','started_at':100}
+                'window':'@2','started_at':100,'startup_probe_started_at':100}
         atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
         no_match=lambda root:(None,'only an idle Bash shell')
         self.assertIsNone(check_worker_startup(self.root,now=130,detector=no_match))

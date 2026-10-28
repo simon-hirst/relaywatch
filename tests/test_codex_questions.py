@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from codex_questions import queued_count, check, path, live_count, question_open
+from codex_questions import queued_count, visible_decision, visible_path, check, path, live_count, question_open
 from engine import atomic_write_json, load_json
 from install import install
 from hook import hook
@@ -70,6 +70,63 @@ class CodexQuestionTests(unittest.TestCase):
         self.assertIsNone(queued_count('May I deploy to test-host?\n • Working'))
         self.assertIsNone(queued_count('• Queued follow-up inputs\n ? 0 questions'))
         self.assertIsNone(queued_count('• 1 question\n nothing in queue'))
+
+    def test_plain_idle_question_is_alerted_without_footer_or_stop(self):
+        screen = ('• The local tests passed; no live deployment was attempted.\n'
+                  '  Should I deploy to production?\n'
+                  '\n› Ask Codex\n')
+        self.assertEqual(visible_decision(screen)[0], 'Should I deploy to production?')
+        event = self.monitor(1000, screen)
+        self.assertIn('CODEX VISIBLE QUESTION', event)
+        request = load_json(self.root/'.agent-watchdog/needs-input.json')
+        self.assertEqual(request['agent'], 'codex')
+        self.assertEqual(request['question'], 'Should I deploy to production?')
+        self.assertEqual(request['status'], 'open')
+        self.assertEqual(len(self.desktop), 0)  # existing poll sends via shared ledger
+        from alerts import notify_pending_question
+        self.assertIn('NEEDS USER INPUT', notify_pending_question(
+            self.root, self.cfg, now=1001,
+            desktop_sender=self.desktop_sender, phone_sender=self.phone_sender))
+        self.assertEqual(len(self.desktop), 1)
+        self.assertEqual(len(self.phone), 1)
+        self.assertIsNone(self.monitor(1020, screen))
+        self.assertEqual(len(self.desktop), 1)
+
+    def test_formal_codex_decision_midturn_is_detected(self):
+        screen = ('• Working (12m 1s • esc to interrupt)\n'
+                  'USER_DECISION_REQUEST: Can I run the live test?\n'
+                  '• Still reviewing safe local results\n'
+                  '› Ask Codex\n')
+        self.assertIn('CODEX VISIBLE QUESTION', self.monitor(1000, screen))
+        self.assertEqual(load_json(self.root/'.agent-watchdog/needs-input.json')['question'],
+                         'Can I run the live test?')
+
+    def test_generic_questions_in_logs_and_user_prompts_do_not_alert(self):
+        screens = [
+            '└ Should I deploy to production?\n› Ask Codex',
+            '• Ran grep tests\n└ Do you want to deploy?\n› Ask Codex',
+            '• Working (19m 26s • esc to interrupt)\n'
+            '  Should I deploy to production?\n› Ask Codex',
+            '› Should I deploy to production?',
+            '• Investigated whether the question is: Can I deploy?\n'
+            '  The answer is no.\n› Ask Codex',
+        ]
+        for screen in screens:
+            with self.subTest(screen=screen):
+                self.assertIsNone(visible_decision(screen))
+
+    def test_answered_question_does_not_reopen_until_new_episode(self):
+        from alerts import clear_question
+        screen = '• Finished the local audit.\n  Should I deploy to production?\n› Ask Codex\n'
+        self.monitor(1000, screen)
+        self.assertTrue(clear_question(self.root, 'codex'))
+        self.assertIsNone(self.monitor(1020, screen))
+        self.assertEqual(load_json(self.root/'.agent-watchdog/needs-input.json')['status'],
+                         'answered')
+        self.monitor(1040, '• Working\n› Ask Codex')
+        self.monitor(1060, '• Working\n› Ask Codex')
+        self.assertFalse(load_json(visible_path(self.root))['visible'])
+        self.assertIn('CODEX VISIBLE QUESTION', self.monitor(1080, screen))
 
     def test_queued_question_alerts_desktop_and_phone_without_autoreply(self):
         message = self.monitor(1000)

@@ -598,6 +598,19 @@ def main():
         print(handoff_diagnostics(ROOT,config))
         return
     print(f'Watchdog in {ROOT} (Ctrl+C stops watcher; hooks remain installed)',flush=True)
+    # Restarting only the polling watcher after a release must not disconnect,
+    # kill or replace an existing managed tmux CLI. Reopen its terminal only
+    # when no tmux client is currently attached and GUI auto-open is enabled.
+    # show_agent_window verifies the exact checkout session and avoids
+    # duplicate attachments; it NEVER starts a new coding provider.
+    if args.command=='run' and config.get('auto_open_terminal_window',True):
+        existing=latest_worker(ROOT)
+        if (existing.get('type')=='tmux' and existing.get('outcome')=='launched'
+                and existing.get('session')==session_name(ROOT)
+                and existing.get('agent') in ('claude','codex')
+                and tmux_exists(existing['session'])):
+            result=show_agent_window(ROOT,config,existing['agent'])
+            print('EXISTING MANAGED SESSION: '+result,flush=True)
     try:
         with DashboardUI(ROOT) as ui:
             while True:

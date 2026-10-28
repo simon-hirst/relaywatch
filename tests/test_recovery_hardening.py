@@ -121,9 +121,19 @@ class RecoveryHardeningTests(unittest.TestCase):
         from session_recovery import _interactive_identity
         argv=(b'node\x00/home/simon/.npm-global/lib/node_modules/'
               b'@anthropic-ai/claude-code/cli.js\x00--rc\x00')
-        with (patch('session_recovery.os.readlink',return_value=str(self.root)),
+        # macOS temp paths often resolve /var -> /private/var; the production
+        # caller passes a resolved root. Avoid mocking os.readlink globally,
+        # since Path.resolve() itself may need to follow symlinks on macOS.
+        import os
+        root=self.root.resolve()
+        real_readlink=os.readlink
+        def readlink(path):
+            if str(path)=='/proc/123/cwd':
+                return str(root)
+            return real_readlink(path)
+        with (patch('session_recovery.os.readlink',side_effect=readlink),
               patch('session_recovery.Path.read_bytes',return_value=argv)):
-            self.assertEqual(_interactive_identity(123,self.root),'claude')
+            self.assertEqual(_interactive_identity(123,root),'claude')
 
     def test_startup_verification_requires_correct_cli_window(self):
         worker={'agent':'codex','type':'tmux','outcome':'launched','session':session_name(self.root),

@@ -117,6 +117,18 @@ class RecoveryHardeningTests(unittest.TestCase):
         self.assertIn('STARTUP VERIFIED',check_worker_startup(self.root,now=267,detector=matched))
         self.assertEqual(load_json(request_path(self.root))['status'],'superseded')
 
+    def test_host_without_proc_does_not_claim_agent_crashed(self):
+        worker={'agent':'codex','type':'tmux','outcome':'launched',
+                'session':session_name(self.root),'window':'@2','started_at':100}
+        atomic_write_json(self.root/'.agent-watchdog/worker.json',worker)
+        with patch('runner.os.path.isdir',return_value=False):
+            result=check_worker_startup(self.root,now=200,
+                                         detector=lambda root:(None,'cannot inspect'))
+        self.assertIn('UNVERIFIED',result)
+        self.assertEqual(load_json(self.root/'.agent-watchdog/worker.json')['startup_status'],'unavailable')
+        self.assertIsNone(check_worker_startup(self.root,now=300,
+                                               detector=lambda root:(None,'cannot inspect')))
+
     def test_npm_claude_wrapper_counts_as_real_interactive_cli(self):
         from session_recovery import _interactive_identity
         argv=(b'node\x00/home/simon/.npm-global/lib/node_modules/'

@@ -235,6 +235,8 @@ class DashboardUI(ConsoleUI):
         worker=load_json(self.root/'.agent-watchdog'/'worker.json',{}) or {}
         if worker.get('startup_status')=='failed':
             return (f'{str(worker.get("agent","Agent")).capitalize()} startup failed — inspect the agent terminal', 'red')
+        if worker.get('startup_status')=='unverified':
+            return (f'{str(worker.get("agent","Agent")).capitalize()} session unverified — attach to its terminal; existing CLI preserved','yellow')
         decision=pending_question(self.root)
         if decision:
             name=str(decision.get('agent','agent')).capitalize()

@@ -222,6 +222,8 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
         prompt_file.write_text(START_PROMPT+'\n',encoding='utf-8')
         script=wd(root)/'interactive-agent.sh'
         if not script.is_file():return 'not launched: interactive-agent.sh missing; reinstall v1.4'
+        if b'\r\n' in script.read_bytes():
+            return 'FAILED launcher preflight: CRLF detected in interactive-agent.sh; reinstall RelayWatch to restore Unix LF endings'
         # Fail before reserving a tmux window if Git/Windows checkout converted
         # the managed Bash entrypoint to CRLF (or if any syntax error exists).
         # A syntactically broken launcher must never be reported as started.
@@ -292,6 +294,40 @@ def can_resume(agent, info, min_remaining=20):
             and not info.get('stale') and info.get('stage')=='normal'
             and isinstance(info.get('remaining_percent'),(float,int))
             and info['remaining_percent']>min_remaining)
+
+
+def check_worker_startup(root, *, now=None, detector=None):
+    """Verify a real interactive provider process, not merely a tmux shell.
+
+    Deliberately retain a failed terminal for diagnosis and never auto-retry an
+    event: an error shell must not be mistaken for a second active coding agent.
+    """
+    root=Path(root).resolve()
+    worker=latest_worker(root)
+    if worker.get('type')!='tmux' or worker.get('outcome')!='launched':
+        return None
+    started=worker.get('started_at')
+    if not isinstance(started,(int,float)):
+        return None
+    if worker.get('startup_status')=='verified':
+        return None
+    now=time.time() if now is None else now
+    from session_recovery import detect_managed_agent
+    evidence,reason=(detector or detect_managed_agent)(root)
+    if (evidence and evidence.get('session')==worker.get('session')
+            and evidence.get('window')==worker.get('window')
+            and evidence.get('agent')==worker.get('agent')):
+        atomic_write_json(wd(root)/'worker.json',
+                          {**worker,'startup_status':'verified','startup_verified_at':now})
+        return f'AGENT STARTUP VERIFIED: {worker["agent"]} interactive CLI in {worker["window"]}'
+    if now-started>=60 and worker.get('startup_status')!='failed':
+        atomic_write_json(wd(root)/'worker.json',
+                          {**worker,'startup_status':'failed','startup_checked_at':now,
+                           'startup_failure_reason':reason or 'no matching interactive CLI process'})
+        return ('AGENT STARTUP NOT VERIFIED: tmux window exists, but no matching '
+                f'{worker["agent"]} CLI was found; inspect the terminal. '
+                'No automatic replacement launched.')
+    return None
 
 
 def maybe_launch(root,config,usages,*,now=None):

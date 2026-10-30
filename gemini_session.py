@@ -112,7 +112,7 @@ def status(root, *, has_session=tmux_exists):
     live = has_session(name)
     return {'state': 'tmux session present' if live else 'tmux session absent',
             'model': record.get('model'), 'window': record.get('window'),
-            'session': name, 'quota': 'monitored', 'running': live}
+            'session': name, 'quota': 'unknown', 'running': live}
 
 
 def launch(root, config, *, model=DEFAULT_MODEL, invoke=None, which=None,

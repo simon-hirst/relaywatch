@@ -27,6 +27,19 @@ MODEL_IDS = {'high': 'gemini-4-argon-high',
 DEFAULT_MODEL = 'high'
 
 
+def cli_path(*, which=shutil.which):
+    """Find the optional agy executable without launching or authenticating it.
+
+    Windows Terminal/WSL watchdog shells may omit ~/.local/bin from PATH.
+    Installed does NOT imply authenticated, licensed or model access.
+    """
+    path=os.pathsep.join((str(Path.home()/'.local/bin'),
+                          str(Path.home()/'.npm-global/bin'),
+                          str(Path.home()/'.bun/bin'),
+                          os.environ.get('PATH','')))
+    return which('agy', path=path)
+
+
 def gemini_session_name(root):
     suffix = hashlib.sha256(str(Path(root).resolve()).encode()).hexdigest()[:10]
     return f'agent-gemini-{suffix}'

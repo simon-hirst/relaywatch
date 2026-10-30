@@ -48,7 +48,9 @@ CLAUDE_FALLBACK = [
     'claude-sonnet-4-6', 'claude-opus-4-6'
 ]
 DEFAULTS = {'claude': {'model': 'claude-opus-5-5', 'effort': 'xhigh'},
-            'codex': {'model': 'gpt-6.1-sol', 'effort': 'xhigh'}}
+            'codex': {'model': 'gpt-6.1-sol', 'effort': 'xhigh'},
+            'gemini': {'model': 'gemini-4-argon-high', 'effort': 'default'}}
+GEMINI_MODELS = ('gemini-4-argon-high', 'gemini-4-argon-medium')
 
 
 def is_model_id(value):
@@ -57,6 +59,8 @@ def is_model_id(value):
 
 def effort_list(agent, model):
     """Conservative fallback from published Claude docs; Codex from live catalog."""
+    if agent == 'gemini':
+        return ['default']
     if agent == 'codex':
         return ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']
     if re.search(r'-(4-6)$', model):
@@ -67,6 +71,9 @@ def effort_list(agent, model):
 
 
 def entries_fallback(agent):
+    if agent == 'gemini':
+        return [{'id': m, 'label': 'Gemini 4 Argon '+m.rsplit('-',1)[-1].title(),
+                 'efforts': ['default']} for m in GEMINI_MODELS]
     if agent == 'claude':
         return [{'id': m, 'label': m.replace('claude-', '').replace('-', ' ').title(),
                  'efforts': effort_list(agent, m)} for m in CLAUDE_FALLBACK]
@@ -186,15 +193,20 @@ def saved():
     result = read_json(DATA,{}) or {}
     return {a: {'model': result.get(a,{}).get('model',DEFAULTS[a]['model']),
                 'effort': result.get(a,{}).get('effort',DEFAULTS[a]['effort'])}
-            for a in ('claude','codex')}
+            for a in ('claude','codex','gemini')}
 
 
 def save(choices):
-    for agent in ('claude','codex'):
-        model = choices[agent]['model']; effort=choices[agent]['effort']
+    validated={}
+    for agent in ('claude','codex','gemini'):
+        setting=choices.get(agent, DEFAULTS[agent])
+        model=setting['model']; effort=setting['effort']
         if not is_model_id(model) or effort not in ('default','low','medium','high','xhigh','max','ultra','none','minimal'):
             raise ValueError(f'Invalid {agent} model/effort selection')
-    atomic_json(DATA, {a:{**choices[a]} for a in ('claude','codex')})
+        if agent=='gemini' and (model not in GEMINI_MODELS or effort!='default'):
+            raise ValueError('Gemini only supports the known Argon High/Medium launch presets')
+        validated[agent]={'model':model,'effort':effort}
+    atomic_json(DATA, validated)
 
 
 def catalogs(refresh=True):
@@ -227,6 +239,11 @@ def catalogs(refresh=True):
             data.insert(0, {'id':existing,'label':existing+' (saved, not in current list)',
                             'efforts':effort_list(agent,existing)})
         found[agent] = data
+    # Antigravity has no documented machine-readable authenticated model
+    # catalog. Only advertise the two known Argon CLI presets; selection is
+    # not proof the user has installed agy or has account access.
+    found['gemini']=entries_fallback('gemini')
+    sources['gemini']='Antigravity Argon presets (install/sign in with agy separately)'
     if refresh:
         atomic_json(CACHE,cache)
     return found,sources
@@ -324,12 +341,17 @@ def popup(stdscr,title,subtitle,items,selected,custom=False):
 
 
 def choose_all(models, sources, choices, *, use_curses=True):
-    for agent in ('claude','codex'):
+    for agent in ('claude','codex','gemini'):
         entries=models[agent]
         current=choices[agent]['model']
         if use_curses:
             model=curses.wrapper(popup, f'{agent.upper()} / Select model', sources[agent], entries,current,True)
         else:model=choose_text(agent,'model',entries,current,sources[agent])
+        if agent=='gemini':
+            if model not in GEMINI_MODELS:
+                raise ValueError('Invalid Gemini Argon preset')
+            choices[agent]={'model':model,'effort':'default'}
+            continue
         matching=next((e for e in entries if e['id']==model),None)
         opts=matching['efforts'] if matching else effort_list(agent,model)
         current_effort=choices[agent]['effort']
@@ -342,9 +364,9 @@ def choose_all(models, sources, choices, *, use_curses=True):
 
 
 def main():
-    parser=argparse.ArgumentParser(description='Select runtime Claude and Codex models and effort')
+    parser=argparse.ArgumentParser(description='Select Claude, Codex and Gemini launch presets')
     parser.add_argument('command',nargs='?',choices=('choose','print','show'),default='choose')
-    parser.add_argument('--agent',choices=('claude','codex'))
+    parser.add_argument('--agent',choices=('claude','codex','gemini'))
     parser.add_argument('--text',action='store_true',help='numbered non-curses selector')
     parser.add_argument('--offline',action='store_true',help='skip live model discovery')
     args=parser.parse_args()
@@ -358,8 +380,9 @@ def main():
         print(e['model']+'\t'+e['effort'])
         return
     if args.command=='show':
-        for a in ('claude','codex'):
-            print(f'{a.capitalize():<7} {chosen[a]["model"]} / {chosen[a]["effort"]}')
+        for a in ('claude','codex','gemini'):
+            suffix=' (manual / quota unknown)' if a=='gemini' else ''
+            print(f'{a.capitalize():<7} {chosen[a]["model"]} / {chosen[a]["effort"]}{suffix}')
         return
     if not sys.stdin.isatty():
         parser.error('Interactive model picker needs a terminal. Use "show" or run in PowerShell/WSL console.')
@@ -371,9 +394,10 @@ def main():
         print('\n  Cancelled. Previous model choices unchanged.')
         return 2
     print('\n'+'='*54)
-    for a in ('claude','codex'):
-        print(f'  {a.upper():<7} {edited[a]["model"]} / {edited[a]["effort"]}')
-    print('  Saved live: next handoff/agent launch uses these settings without restarting the watchdog.')
+    for a in ('claude','codex','gemini'):
+        suffix=' (manual only)' if a=='gemini' else ''
+        print(f'  {a.upper():<7} {edited[a]["model"]} / {edited[a]["effort"]}{suffix}')
+    print('  Claude/Codex: next handoff. Gemini: next manual launch-gemini.')
     if input('\n  Save these launch settings? [Y/n] ').strip().lower() not in ('','y','yes'):
         print('  Cancelled.');return 2
     save(edited)

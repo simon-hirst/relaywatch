@@ -446,7 +446,8 @@ def main():
     parser=argparse.ArgumentParser(description='Local Claude Code + Codex handoff watchdog')
     parser.add_argument('command',nargs='?',choices=('run','once','status','inspect','launch-codex','launch-gemini','show-gemini','gemini-status','ready','recover-session','show','notify-test','notify-setup','pause','resume','resume-check','unpause','daybreak-continue','daybreak-restored','daybreak-status'),default='run')
     parser.add_argument('--agent',choices=('claude','codex'),default='claude')
-    parser.add_argument('--gemini-model',choices=('high','medium'),default='high')
+    parser.add_argument('--gemini-model',choices=('high','medium'),default=None,
+                        help='override saved Shift+M Gemini preset for this manual launch')
     parser.add_argument('--interval',type=int,default=20)
     parser.add_argument('--retry',action='store_true',help='retry an already attempted manual Codex launch')
     parser.add_argument('--confirm-complete',action='store_true',help='I verified the final handoff after the managed CLI exited')
@@ -523,7 +524,9 @@ def main():
         if not result.startswith('HANDOFF READY'):sys.exit(1)
         return
     if args.command=='launch-gemini':
-        result=launch_gemini(ROOT,config,model=args.gemini_model)
+        from model_picker import saved
+        model=args.gemini_model or saved()['gemini']['model'].rsplit('-',1)[-1]
+        result=launch_gemini(ROOT,config,model=model)
         print(result)
         if not result.startswith('CREATED'):sys.exit(1)
         return

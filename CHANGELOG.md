@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.20.0 — Verified Antigravity Gemini quota monitoring (2026-10-30)
+
+- Poll the authenticated Antigravity CLI (agy 1.1.12+) with the structured zero-turn, zero-token `-p /usage --output-format json` command, normally at most every 120 seconds.
+- Parse grouped quota bucket IDs, remaining fractions and UTC reset timestamps, rejecting unsuccessful commands, accidental model turns, nonzero token consumption, malformed and duplicate buckets.
+- Show the verified Gemini 4 Argon weekly percentage and reset in the dashboard; expose a full read-only snapshot through `gemini-status`.
+- Keep Argon-specific limits separate from general Gemini Models and Antigravity Claude/GPT quotas. Do not attribute generic Gemini 5H to Argon when the Argon 5H bucket is absent.
+- Cache only validated quota measurements in ignored local runtime state, mark readings stale after five minutes, throttle retries, and never persist raw CLI output or credentials.
+- Continue existing Claude/Codex automatic handoffs unchanged. Gemini three-way rotation remains disabled until verified safe Gemini turn and handoff events are available.
+- Add cross-platform regression tests with the verified grouped output schema and zero-token command contract.
+
 ## v3.19.1 — Gemini dashboard and model selector (2026-10-30)
 
 - Always show Gemini 4 Argon High/Medium on the watchdog dashboard, even before its optional Antigravity CLI is installed.

@@ -165,7 +165,9 @@ def refresh(root, config=None, *, now=None, force=False, run=None, locate=None):
         binary=locate() if locate else cli_path()
         if not binary:
             raise RuntimeError('agy CLI missing from WSL; install and sign into Antigravity')
-        version_result=executor([binary, '--version'],capture_output=True,text=True,timeout=6)
+        # The Antigravity binary occasionally takes >6s to warm up in WSL;
+        # still require a fresh, verified version before any /usage probe.
+        version_result=executor([binary, '--version'],capture_output=True,text=True,timeout=12)
         if version_result.returncode:
             raise RuntimeError('agy --version failed')
         cli_version=parse_version((version_result.stdout or '')+' '+(version_result.stderr or ''))

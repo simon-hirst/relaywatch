@@ -153,11 +153,15 @@ class GeminiStartupDeliveryTests(unittest.TestCase):
         self.assertEqual(load_json(gs.receipt_path(self.root))['state'],
                          'awaiting_first_invocation')
 
-    def test_can_adopt_current_v3_22_session_without_restart(self):
+    def test_can_adopt_current_v3_22_session_without_duplicate_input(self):
         gs.receipt_path(self.root).unlink()
         # Existing worker started long before the watcher got updated.
-        self.assertIn('SUBMITTED',self.monitor('Antigravity\nType a message',now=1080))
+        # An old session might have already run and finished a prompt; never
+        # re-send just because its composer is now empty.
+        self.assertIn('UNVERIFIED',self.monitor('Antigravity\nType a message',now=1080))
         self.assertEqual(load_json(gs.receipt_path(self.root))['event_id'],self.event)
+        self.assertEqual(self.notifications[0][0],'Antigravity initial handoff needs attention')
+        self.assertFalse(any(cmd[1]=='send-keys' for cmd in self.commands))
 
     def test_gate_rejects_other_event_and_worker(self):
         self.assertFalse(gs.gate(self.root,'wrong',timeout=0.01))

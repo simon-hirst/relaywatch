@@ -104,7 +104,12 @@ def launch(root, config, *, model=DEFAULT_MODEL, invoke=None, which=None,
                   'verify files and git status before edits. Work on the next safe local task, '
                   'run tests, update docs/HANDOFF.md, and request explicit approval before '
                   'commits, pushes, deployments, live changes or destructive operations. '
-                  'Do not assume RelayWatch knows Gemini quota: use /usage in Antigravity. '
+                  'RelayWatch monitors your Argon WEEKLY quota. There is NO 20% '
+                  'preparation warning for Gemini. At 10% WEEKLY remaining or below, '
+                  'write docs/HANDOFF.md and a dated docs/session-reports/ summary '
+                  'at your next safe checkpoint. The watchdog will also deliver '
+                  'a one-shot native hook reminder when possible. Do not auto-switch '
+                  'agents, commit, deploy or interrupt unfinished work. '
                   'Leave a clear final handoff before exiting.')
         model_id = MODEL_IDS[model]
         # -i is documented as prompt-interactive. Do not use -p/--print.

@@ -582,7 +582,9 @@ def main():
             note='Weekly-only (Pro) — no separate Argon five-hour quota in this account response.'
         else:
             note='Only Argon-group buckets count toward Argon; unreported 5h remains unknown.'
+        from gemini_startup import receipt_path
         print(json.dumps({'session':gemini_status(ROOT),
+                          'initial_handoff':load_json(receipt_path(ROOT),{}) or {},
                           'quota':quota,
                           'note':note},indent=2))
         return

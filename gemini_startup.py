@@ -64,7 +64,7 @@ def start(root, *, event_id, session, window, now=None):
     atomic_write_json(receipt_path(root),{
         'event_id':event_id,'session':session,'window':window,
         'started_at':when,'state':'awaiting_first_invocation',
-        'delivery':'agy --prompt-interactive','attempted':False})
+        'delivery':'agy interactive positional prompt','attempted':False})
     return when
 
 
@@ -119,7 +119,8 @@ def hook(root,event,payload,*,now=None):
     """
     if event not in ('SessionStart','PreInvocation') or not _matches(root,payload):
         return False
-    if not str(payload.get('modelName','')).startswith('gemini-4-argon-'):
+    if (event=='PreInvocation' and
+            not str(payload.get('modelName','')).startswith('gemini-4-argon-')):
         return False
     root=Path(root)
     worker=latest_worker(root)
@@ -214,6 +215,8 @@ def monitor(root,config, *, now=None, run=subprocess.run,
         start(root,event_id=worker['event_id'],session=worker['session'],
               window=worker['window'],now=worker.get('started_at'))
         state=load_json(receipt_path(root),{}) or {}
+        atomic_write_json(receipt_path(root),{**state,'adopted_running_session':True})
+        state=load_json(receipt_path(root),{}) or {}
     if (state.get('state')=='confirmed' or state.get('alerted')
             or worker.get('event_id')!=state.get('event_id')
             or worker.get('window')!=state.get('window')):
@@ -222,9 +225,15 @@ def monitor(root,config, *, now=None, run=subprocess.run,
     age=when-state.get('started_at',when)
     if age < WAIT_BEFORE_RESCUE:
         return None
+    # Only NEW sessions with a managed startup receipt can be rescued
+    # automatically. An already-running v3.22 TUI might have processed
+    # an earlier prompt before this version installed its hook, and its
+    # empty composer is not proof that the conversation is new.
+    # If adopted, alert the user instead of risking duplicate work.
     # Mark one attempted rescue only if verified process and explicit idle
     # composer. Otherwise leave the UI untouched and alert after grace.
     if (not state.get('attempted') and not state.get('alerted')
+            and not state.get('adopted_running_session')
             and age>=WAIT_BEFORE_RESCUE):
         with launch_lock(root):
             state=load_json(receipt_path(root),{}) or {}

@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.19.1 — Gemini dashboard and model selector (2026-10-30)
+
+- Always show Gemini 4 Argon High/Medium on the watchdog dashboard, even before its optional Antigravity CLI is installed.
+- Distinguish agy missing in Debian WSL, CLI present but sign-in unverified, and a currently active Gemini session; quotas remain explicitly unknown.
+- Add Argon High/Medium to Shift+M and save the selection in .agent-watchdog/models.json without changing Claude/Codex selections.
+- Default launch-gemini to the saved manual Argon preset; permit explicit -GeminiModel high/medium overrides.
+- Keep the compact TTY footer from wrapping or losing its closing delimiter; test installation, model presets, dashboard statuses, and manual launcher selection.
+- Do not start or stop existing coding sessions or change automatic Claude/Codex quota-handoff behavior.
+
 ## v3.19.0 — Optional Gemini 4 Argon / Antigravity CLI (2026-10-30)
 
 - Add opt-in interactive Gemini 4 Argon High/Medium sessions using Google's Antigravity CLI (`agy`) with Remote Control and shared handoff documentation.

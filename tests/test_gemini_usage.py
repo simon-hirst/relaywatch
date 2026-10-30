@@ -158,7 +158,8 @@ class GeminiQuotaTests(unittest.TestCase):
         self.assertTrue(gu.argon_weekly_only_pro(group))
         unknown={'weekly': {**group['weekly'], 'id':'different-plan-weekly'}}
         self.assertFalse(gu.argon_weekly_only_pro(unknown))
-        other={**group, '5h':{'remaining_percent': 77.0}}
+        other={**group, '5h':{**gu.parse(example())['Gemini Models']['5h'],
+                               'used_percent':23.0, 'remaining_percent':77.0}}
         self.assertFalse(gu.argon_weekly_only_pro(other))
         with patch('console_ui.read_gemini_quota',return_value={
             'fresh':True,'groups':{'Gemini 4 Argon':unknown}}):

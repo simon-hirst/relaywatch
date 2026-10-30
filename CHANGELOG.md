@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.21.0 — Antigravity phone alerts and weekly 10% handoff (2026-10-30)
+
+- Send managed Antigravity `ask_question` and `ask_permission` notifications through the existing Windows desktop and optional ntfy phone channels; avoid sending sensitive question arguments.
+- Add a conservative, read-only detector for native permission/approval cards visible in the managed Gemini terminal, including subagent approval prompts, with deduplication. Antigravity Remote Control remains the proper phone approval interface.
+- Install native workspace-scoped Antigravity `PreToolUse`, `PostToolUse` and `PreInvocation` hooks while preserving unrelated user hooks and leaving global settings and permission checks untouched.
+- For Gemini 4 Argon's own verified **weekly** quota only, warn **once per reset period at 10% or less remaining** (90%+ used), send desktop and ntfy notifications, and inject one advisory instruction at the next model invocation to update docs/HANDOFF.md and a session report.
+- **No Gemini warning at 20%**. No automatic Gemini switch, forced stop, approval, tmux key injection, or change to Claude/Codex's existing thresholds.
+- Reject stale/missing quota, avoid duplicate notifications, retry failed channels, and add regression coverage for threshold boundaries, hook safety, workspace ownership, and alert delivery.
+
 ## v3.20.1 — Gemini 4 Argon Pro weekly-only label (2026-10-30)
 
 - Display **Weekly-only (Pro)** instead of an unexplained unknown Argon 5-hour allowance when verified Antigravity usage has the Pro-specific `gemini-argon-wtu-weekly` bucket and no separate Argon 5-hour bucket.

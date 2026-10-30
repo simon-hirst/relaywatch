@@ -149,6 +149,7 @@ class DashboardUI(ConsoleUI):
         super().__init__(root)
         self.live_lines = 0
         self.stats = {a:{'state':'checking','windows':{}} for a in ('claude','codex')}
+        self.gemini_active = False
         self.recent_events = {}
         self.last_plain = None
         self.last_plain_time = 0
@@ -192,10 +193,14 @@ class DashboardUI(ConsoleUI):
         return '█'*count+'░'*(cells-count)
 
     def _extract(self, messages):
+        self.gemini_active = False
         events=[]
         owner=None
         for raw in messages:
             msg=re.sub(r'[\x00-\x1f\x7f-\x9f]', ' ', raw).strip()
+            if msg.startswith('GEMINI MANAGED:'):
+                self.gemini_active = True
+                continue
             match=self._AGENT.match(raw)
             if match:
                 agent,limiting,used,left,stage=match.groups()
@@ -232,6 +237,8 @@ class DashboardUI(ConsoleUI):
     def _pending(self):
         if paused(self.root):
             return ('PAUSED BY USER — automation disabled; use -Command resume to continue','yellow')
+        if self.gemini_active:
+            return ('Gemini 4 Argon active — quota unknown; check /usage in Antigravity','cyan')
         worker=load_json(self.root/'.agent-watchdog'/'worker.json',{}) or {}
         if worker.get('startup_status')=='failed':
             return (f'{str(worker.get("agent","Agent")).capitalize()} startup failed — inspect the agent terminal', 'red')
@@ -320,6 +327,8 @@ class DashboardUI(ConsoleUI):
             elif stage=='checking': shown='awaiting first reading'
             else: shown=stage
             rows.append((f'           {shown}', self._severity(stage)))
+        if self.gemini_active:
+            rows.append(('  GEMINI  Argon High/Medium  •  quota unknown  •  interactive /usage','purple'))
         next_text,next_color=self._pending()
         rows.extend([(hr,'dim'),('  NEXT  '+next_text,next_color),(hr,'dim')])
         chosen=saved()

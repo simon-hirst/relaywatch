@@ -258,7 +258,7 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
                   +' --event-id '+shlex.quote(str(event['event_id'])))
             inner=('export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.bun/bin:$PATH"; '
                    +gate+' && '+shlex.quote(str(agy))+' --model '+shlex.quote(model_id)
-                   +' --remote-control -i '+shlex.quote(auto_prompt()))
+                   +' --remote-control '+shlex.quote(auto_prompt()))
         else:
             prompt_file=wd(root)/'next-agent-prompt.txt'
             prompt_file.write_text(START_PROMPT+'\n',encoding='utf-8')

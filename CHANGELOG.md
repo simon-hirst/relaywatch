@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.22.1 — Verify and recover Argon initial handoff submission (2026-10-30)
+
+- Fix automatically launched Gemini 4 Argon opening in an interactive tmux window without actually beginning its first handoff task.
+- Gate `agy --remote-control -i` until the exact worker/event startup receipt is written; treat only the native `PreInvocation` hook as proof of a first real model invocation (not merely an open tmux window or `SessionStart`).
+- After 35 seconds without proof, inspect the correct live managed Gemini process and pane. A **strictly empty** composer permits exactly one short handoff prompt sent as literal tmux keys followed by Enter; never type during active work, authentication, permissions, approvals, user-typed content or unknown terminal state.
+- Record the rescue attempt BEFORE typing to prevent duplicate messages across watchdog restarts. If still unverified after 75 seconds, notify desktop and ntfy phone rather than risk sending a duplicate or overriding user input.
+- Adopt existing v3.22.0 Gemini sessions without restarting/killing them, show prompt-delivery state in the dashboard and `gemini-status`, and add cross-platform tests for actual first invocation, hooks, empty/busy composer, startup race, retries and user-alert fallback.
+- Preserve Gemini's only-at-10%-weekly handoff warning, all Claude/Codex thresholds, active sessions, user pauses and permission policy.
+
 ## v3.22.0 — Automatic verified Gemini 4 Argon quota fallback (2026-10-30)
 
 - Fix the real Codex 05:43 UTC handoff gap: if neither Claude nor Codex has over 20% of its limiting quota available, resume the verified completed handoff with Gemini 4 Argon when its **own fresh weekly quota exceeds 10%** and `agy` is installed.

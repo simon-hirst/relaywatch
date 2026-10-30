@@ -472,7 +472,7 @@ def maybe_launch(root,config,usages,*,now=None):
     if chosen=='gemini':
         week=argon_snapshot['groups']['Gemini 4 Argon']['weekly']
         usage={'agent':'gemini','stage':'normal','stale':False,
-               'remaining_percent':week['remaining_percent']}
+               'remaining_percent':round(100*week['remaining_fraction'],4)}
     else:
         usage=usages[chosen]
     result=launch(root,config,{**event,'target':chosen,'verified_stop':True},usage)

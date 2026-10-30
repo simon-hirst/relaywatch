@@ -1,10 +1,10 @@
-"""Opt-in, conservative Antigravity CLI (Gemini 4 Argon) session support.
+"""Conservative interactive Antigravity CLI (Gemini 4 Argon) support.
 
-Google currently publishes model quotas through the interactive /usage panel,
-not a stable, documented machine-readable quota API. This module deliberately
-does NOT fabricate percentages or join the Claude/Codex automatic rotation.
-An explicit command opens an interactive managed Gemini session, only when
-no other managed TUI/process is running in this checkout.
+The verified zero-token /usage JSON provides weekly Argon quota, separately
+from general Gemini buckets. A finished Claude/Codex Stop-hook handoff may
+safely enter an interactive Gemini fallback in the existing managed tmux,
+but cannot force a running Gemini turn to stop when quotas reset.
+Manual launch-gemini remains isolated and refuses concurrent CLI sessions.
 """
 from __future__ import annotations
 import hashlib
@@ -208,10 +208,10 @@ def show(root, config, *, force=True, invoke=None):
 
 
 def blocks_auto_handoff(root, *, invoke=None):
-    """An active Gemini tmux session must block Claude/Codex automatic launches.
+    """Any running manual or automatic Gemini session owns this checkout.
 
-    Do not inspect tmux on projects that have never explicitly launched Gemini.
-    This preserves the existing two-provider code path and older test mocks.
+    Do not inspect tmux on projects without a Gemini worker record. A
+    shared-session worker is recognized by exact project/session identity.
     """
     worker=latest_worker(root)
     shared=session_name(root)

@@ -103,6 +103,41 @@ Remote Control must be available for your Claude account and connected
 to this actual session. A remote-only or cloud session not managed by
 RelayWatch is not monitored by its local hooks.
 
+### Gemini 4 Argon (Antigravity CLI, opt-in)
+
+RelayWatch supports **Gemini 4 Argon High and Medium** in the official
+[Google Antigravity CLI](https://antigravity.google/docs/install?tab=cli)
+(`agy`), **not** the older Gemini CLI. Install and sign in to `agy` inside
+your **Debian WSL** distro (or your native Linux/macOS environment) first,
+then check `agy models` includes `gemini-4-argon-high`.
+
+A Gemini session is started **manually and exclusively**. You must finish
+Claude/Codex's current task and verified handoff, then exit the previous
+managed CLI/tmux session before starting Gemini. RelayWatch refuses to launch
+Gemini while another managed coding session or process is still active.
+
+```powershell
+# From the RelayWatch repo in Windows PowerShell:
+.\watchdog-windows.ps1 -ProjectPath "C:\path\to\project" -Command launch-gemini -GeminiModel high
+.\watchdog-windows.ps1 -ProjectPath "C:\path\to\project" -Command show-gemini
+.\watchdog-windows.ps1 -ProjectPath "C:\path\to\project" -Command gemini-status
+```
+
+Use `-GeminiModel medium` for the medium-thinking variant. The managed
+`agy` session opens with `--remote-control` and a handoff-reading initial
+prompt. It is **interactive**, stays in a separately named tmux session, and
+preserves the terminal for diagnostics when `agy` exits. The agent is not
+granted any permission bypass. Antigravity Remote Control can display the
+session on a phone or laptop and send its own browser notifications.
+
+**Current limitation:** Antigravity documents quota status in an interactive
+`/usage` panel, but no stable machine-readable quota endpoint is documented.
+RelayWatch therefore displays Gemini quota as **unknown**, and **does not**
+automatically hand off into or out of Gemini at 80/90%. While the Gemini
+session exists it suspends Claude/Codex automatic launches to prevent
+concurrent edits. To resume the two-agent rotation, finish the Gemini handoff
+and exit the Gemini terminal/session. No quota values are guessed.
+
 ### Automatically install new releases
 
 Auto-update is **opt-in**. Once enabled, RelayWatch checks the latest published

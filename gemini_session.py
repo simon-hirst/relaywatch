@@ -129,5 +129,12 @@ def show(root, config, *, force=True, invoke=None):
 
 
 def blocks_auto_handoff(root, *, invoke=None):
-    """An active Gemini tmux session must block Claude/Codex automatic launches."""
-    return tmux_exists(gemini_session_name(root), invoke=invoke)
+    """An active Gemini tmux session must block Claude/Codex automatic launches.
+
+    Do not inspect tmux on projects that have never explicitly launched Gemini.
+    This preserves the existing two-provider code path and older test mocks.
+    """
+    record = load_json(record_path(root), {}) or {}
+    session = gemini_session_name(root)
+    return bool(record.get('session') == session and
+                tmux_exists(session, invoke=invoke))

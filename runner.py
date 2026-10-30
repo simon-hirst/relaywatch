@@ -118,7 +118,7 @@ def wsl_host():
     return 'microsoft' in os.uname().release.lower() or bool(os.environ.get('WSL_DISTRO_NAME'))
 
 
-def show_agent_window(root, config, agent=None, *, force=False, invoke=None):
+def show_agent_window(root, config, agent=None, *, force=False, invoke=None, session_override=None):
     """Attach a visible *new Windows Terminal* to the existing tmux session.
 
     This does not launch a second agent. Auto mode skips opening a duplicate
@@ -127,7 +127,9 @@ def show_agent_window(root, config, agent=None, *, force=False, invoke=None):
     if Windows Terminal, WSL interop or GUI startup is unavailable.
     """
     root=Path(root).resolve()
-    session=session_name(root)
+    session=session_override or session_name(root)
+    if session_override and session_override != 'agent-gemini-'+hashlib.sha256(str(root).encode()).hexdigest()[:10]:
+        return 'window not opened: invalid Gemini managed session'
     if not tmux_exists(session,invoke=invoke):
         return f'window not opened: tmux session {session} does not exist'
     if not force and not config.get('auto_open_terminal_window',True):
@@ -157,7 +159,7 @@ def show_agent_window(root, config, agent=None, *, force=False, invoke=None):
     script=wd(root)/'open-agent-window.ps1'
     if not script.is_file():return 'window not opened: open-agent-window.ps1 missing; reinstall v1.5'
     agent=agent or latest_worker(root).get('agent','codex')
-    if agent not in ('claude','codex'):
+    if agent not in ('claude','codex','gemini'):
         return 'window not opened: cannot determine active agent'
     run=invoke or subprocess.run
     try:
@@ -194,12 +196,19 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
     """
     root=Path(root).resolve();target=event.get('target')
     if paused(root):return 'not launched: paused explicitly by the user'
+    from gemini_session import blocks_auto_handoff
+    if blocks_auto_handoff(root):
+        return 'not launched: Gemini interactive session is active; do not start another coding agent'
     if target not in ('claude','codex'):return 'not launched: invalid receiving agent'
     if not handoff_is_real(root):return 'not launched: handoff is absent or still installer placeholder'
     if not isinstance(usage,dict) or usage.get('agent')!=target or usage.get('stale') or usage.get('stage') in ('unknown','handoff','prepare'):
         return f'not launched: {target} quota unavailable or insufficient (>20% remaining required)'
     if not event.get('event_id'):return 'not launched: invalid handoff event'
     with launch_lock(root):
+        # A manual Gemini switch may race the quota poller: re-check ownership
+        # under the shared lock before touching any tmux pane.
+        if blocks_auto_handoff(root):
+            return 'not launched: Gemini interactive session appeared; refusing a concurrent coding agent'
         history=load_json(wd(root)/'launch-history.json',{}) or {}
         if event['event_id'] in history and not allow_existing_event:
             return 'not launched: this handoff event has already been handled'
@@ -367,6 +376,10 @@ def maybe_launch(root,config,usages,*,now=None):
     Pending markers do not expire: e.g. both providers can reset overnight.
     """
     if paused(root) or not config.get('auto_launch_next_agent',False):return None
+    # An explicitly launched Gemini coding TUI owns this checkout until closed.
+    # Never start a Claude/Codex handoff concurrently, even if an old marker exists.
+    from gemini_session import blocks_auto_handoff
+    if blocks_auto_handoff(root):return None
     now=time.time() if now is None else now
     root=Path(root)
     handoff=root/'docs'/'HANDOFF.md'

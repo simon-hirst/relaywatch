@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 session="${1:?expected tmux session}"; agent="${2:-codex}"
-[[ "$session" =~ ^agent-handoff-[a-f0-9]{10}$ ]] || { echo 'Invalid managed session' >&2; exit 2; }
+[[ "$session" =~ ^agent-(handoff|gemini)-[a-f0-9]{10}$ ]] || { echo 'Invalid managed session' >&2; exit 2; }
 command -v tmux >/dev/null || { echo 'tmux not installed' >&2; exit 2; }
 case "$(uname -s)" in
  Darwin)

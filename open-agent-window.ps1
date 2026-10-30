@@ -1,8 +1,8 @@
 # Runs in Windows PowerShell, invoked by a WSL watchdog or manually from Windows.
 # Shows an EXISTING tmux session: never starts a second Claude/Codex CLI.
 param(
-  [Parameter(Mandatory=$true)][ValidatePattern('^agent-handoff-[a-f0-9]{10}$')][string]$Session,
-  [ValidateSet('claude','codex')][string]$Agent = 'codex',
+  [Parameter(Mandatory=$true)][ValidatePattern('^agent-(?:handoff|gemini)-[a-f0-9]{10}$')][string]$Session,
+  [ValidateSet('claude','codex','gemini')][string]$Agent = 'codex',
   [string]$Distro = 'Debian'
 )
 $ErrorActionPreference = 'Stop'

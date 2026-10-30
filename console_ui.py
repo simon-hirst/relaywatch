@@ -7,6 +7,7 @@ from __future__ import annotations
 import os,select,sys,termios,tty,subprocess,shutil,re
 from pathlib import Path
 from model_picker import saved
+from gemini_session import cli_path
 from reset_times import local_timezone, format_reset_local
 from pause_control import paused
 from engine import load_json
@@ -66,7 +67,8 @@ class ConsoleUI:
         chosen=saved()
         def describe(a):return f'{chosen[a]["model"]}/{chosen[a]["effort"]}'
         hotkey='Shift+M: change models/efforts' if self.available else 'change models: watchdog-windows.ps1 -Command models'
-        return f'━━ {hotkey}  |  Claude {describe("claude")}  |  Codex {describe("codex")}  ━━'
+        gemini=saved()['gemini']['model'].rsplit('-',1)[-1].title()
+        return f'━━ {hotkey}  |  Claude {describe("claude")}  |  Codex {describe("codex")}  |  Gemini Argon {gemini} (manual)  ━━'
 
     def clear_footer(self):
         """Remove the lone footer *on screen*, leaving no historical copies.
@@ -327,11 +329,20 @@ class DashboardUI(ConsoleUI):
             elif stage=='checking': shown='awaiting first reading'
             else: shown=stage
             rows.append((f'           {shown}', self._severity(stage)))
+        chosen=saved()
+        gemini_model=chosen['gemini']['model'].rsplit('-',1)[-1].title()
         if self.gemini_active:
-            rows.append(('  GEMINI  Argon High/Medium  •  quota unknown  •  interactive /usage','purple'))
+            gemini_line=f'  GEMINI  Argon {gemini_model}  •  session active  •  quota unknown'
+            gemini_color='purple'
+        elif cli_path():
+            gemini_line=f'  GEMINI  Argon {gemini_model}  •  CLI found, sign-in unverified  •  quota unknown'
+            gemini_color='dim'
+        else:
+            gemini_line=f'  GEMINI  Argon {gemini_model}  •  agy missing in WSL  •  quota unknown'
+            gemini_color='yellow'
+        rows.append((gemini_line, gemini_color))
         next_text,next_color=self._pending()
         rows.extend([(hr,'dim'),('  NEXT  '+next_text,next_color),(hr,'dim')])
-        chosen=saved()
         claude=chosen['claude'];codex=chosen['codex']
         hotkey='Shift+M models / effort' if self.available else 'models: -Command models'
         # On narrower windows, place model choices on another row. No wrapping
@@ -339,6 +350,7 @@ class DashboardUI(ConsoleUI):
         rows.extend([
             ('  '+hotkey+'   •   Ctrl+C stop','purple'),
             (f'  Claude {claude["model"]}/{claude["effort"]}   |   Codex {codex["model"]}/{codex["effort"]}','dim'),
+            (f'  Gemini Argon {gemini_model} (manual launch only; /usage in CLI)','dim'),
         ])
         return [(line[:max(1,columns-1)],color) for line,color in rows]
 

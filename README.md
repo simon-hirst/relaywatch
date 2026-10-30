@@ -165,6 +165,41 @@ interactive Gemini tmux session exists, Claude/Codex automatic launches
 remain suspended to prevent concurrent edits. Close the finished Gemini
 session only after preserving its handoff.
 
+### Antigravity user-input alerts and 10% weekly handoff reminder
+
+Managed interactive `agy` sessions now use **workspace-scoped** native
+Antigravity hooks in `.agents/hooks.json`. RelayWatch forwards
+`ask_question` and `ask_permission` requests through the **same existing
+Windows desktop and optional ntfy phone notification settings** used by
+Claude and Codex. A read-only monitor also detects unmistakable pending
+permission/approval cards in the **currently visible** managed Gemini tmux
+pane, including subagent requests. The native hook fires when the request
+is made; the screen fallback is best-effort, so it may not identify every
+permission dialog. Neither path reads historical transcripts, transmits
+question text, answers prompts, modifies permissions, or types into tmux.
+PreToolUse hooks return `{"decision":"allow"}`, delegating to Agy's regular
+permission checks, **not** `auto_approve`. Existing unrelated hooks and
+global Antigravity settings are preserved.
+
+For additional native notifications, Antigravity's
+[Remote Control](https://antigravity.google/docs/remote-control?tab=cli)
+can display approval cards and questions in a phone browser; enable its
+browser push notifications separately. Newly installed hooks may require
+restarting the **Antigravity CLI session** after a safe handoff, not restarting
+the RelayWatch poller alone.
+
+**Gemini's weekly warning is different from Claude/Codex's 80/90 rules.**
+When the verified **Gemini 4 Argon weekly bucket** first reports **10% or
+less remaining** (90%+ used), and the Gemini session is managed/active, RelayWatch
+notifies the desktop and ntfy phone once for that weekly reset period
+(with per-channel retries if delivery fails). On its next model invocation
+the native `PreInvocation` hook inserts a single advisory reminder to update
+`docs/HANDOFF.md` and a dated session summary at a safe checkpoint.
+**There is NO Gemini warning at 20% remaining**, no automatic provider switch,
+no forced stop, and no interruption of an active conversation. Stale, absent,
+or malformed quota data never triggers this warning. Claude/Codex thresholds
+remain unchanged.
+
 ### Automatically install new releases
 
 Auto-update is **opt-in**. Once enabled, RelayWatch checks the latest published

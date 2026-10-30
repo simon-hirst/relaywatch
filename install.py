@@ -237,7 +237,33 @@ def merge_hook_file(path,hook_cmd,events):
     path.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
 
 
-def historical_handoff(root):
+def merge_gemini_hooks_file(path, hook_cmd):
+    """Install project-scoped Agy native hooks without replacing user hooks.
+
+    Antigravity hook files are a named mapping, NOT Claude's hooks object.
+    The PreToolUse response must be `decision: allow`: ordinary permissions
+    still apply; it never auto-approves anything.
+    """
+    if path.exists():
+        data=json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(data,dict):
+            raise ValueError(f'Invalid existing Antigravity hooks file {path}')
+    else:
+        data={}
+    key='relaywatch-gemini-attention'
+    prior=data.get(key)
+    if prior is not None:
+        if not isinstance(prior,dict) or '.agent-watchdog/gemini_attention.py' not in json.dumps(prior):
+            raise ValueError(f'Antigravity hook name {key} already owned by another integration')
+    def entry(event, matcher=None):
+        cmd=hook_cmd+' --event '+event
+        handler={'type':'command','command':cmd,'timeout':12}
+        item={'hooks':[handler]}
+        if matcher is not None:
+            item['matcher']=matcher
+        return item
+    data[key]={
+        'PreToolUse':[entry('PreToolUse','^(ask_question|ask_permission)
     files=[]
     for p in root.glob('docs/*.md'):
         if p.name in ('HANDOFF.md','WORKFLOW.md'):continue
@@ -255,7 +281,7 @@ def install(project):
     root=project.resolve()
     if not root.is_dir():raise ValueError(f'Project folder does not exist: {root}')
     dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
-    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
+    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
         shutil.copy2(SOURCE/fname,dest/fname)
         # A Windows Git checkout may turn Bash LF endings into CRLF; this
         # makes 'set -o pipefail' fail before a managed agent can start.
@@ -272,7 +298,254 @@ def install(project):
                   'capacity.py','session_recovery.py','quota_outage.py','session_summary.py',
                   'console_ui.py','cli_paths.py','codex_steer.py','reset_times.py',
                   'pause_control.py','resume_agent.py','quota_behavior.py',
-                  'codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','background_wait.py',
+                  'codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py',
+                  'daybreak_watch.py','update_supervisor.py','VERSION')
+    ledger = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in code_files}
+    (dest/'managed-files.json').write_text(json.dumps(ledger,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+    (dest/'README.md').write_text(README_POINTER,encoding='utf-8')
+    config_file=dest/'config.json'
+    if not config_file.exists():
+        config={'agents':{
+           'claude':{'url':'http://localhost:3790/get','used_pct_path':None},
+           'codex':{'url':'http://localhost:3789/get','used_pct_path':None}},
+           'prepare_remaining_pct':20,'handoff_remaining_pct':10,
+           'unrestricted_mode':False, 'cache_seconds':20,'stale_grace_seconds':120,
+           'telemetry_checkpoint_seconds':60,'telemetry_pause_seconds':180,
+           'enable_codex_queue':True,'active_session_seconds':120,
+           'auto_launch_next_agent':False,'auto_launch_grace_seconds':10,
+           'auto_open_terminal_window':True,'wsl_distro':__import__('os').environ.get('WSL_DISTRO_NAME','Debian'),
+           'auto_continue_turns':True, 'max_stalled_auto_continuations':2,
+           'capacity_recovery': {'enabled':True,'stable_seconds':20,'max_retries':2,'delays_seconds':[30,90]},
+           'alert_retry_seconds':120, 'alerts': {'desktop':True,'phone':{'enabled':False,'server':'https://ntfy.sh', 'topic':'relaywatch-'+secrets.token_hex(16),'include_question':False}}}
+        config_file.write_text(json.dumps(config,indent=2)+'\n',encoding='utf-8')
+    # Existing local config must be upgraded non-destructively.
+    config=json.loads(config_file.read_text(encoding='utf-8'))
+    changed=False
+    for key,value in [('auto_launch_next_agent',False),('auto_launch_grace_seconds',10),('handoff_alert_after_seconds',300),('auto_open_terminal_window',True),('wsl_distro','Debian'),('auto_continue_turns',True),('max_stalled_auto_continuations',2),('alert_retry_seconds',120),('telemetry_checkpoint_seconds',60),('telemetry_pause_seconds',180),('capacity_recovery',{'enabled':True,'stable_seconds':20,'max_retries':2,'delays_seconds':[30,90]})]:
+        if key not in config:config[key]=value;changed=True
+    if 'alerts' not in config:
+        config['alerts']={'desktop':True,'phone':{'enabled':False,'server':'https://ntfy.sh','topic':'relaywatch-'+secrets.token_hex(16),'include_question':False}}
+        changed=True
+    if changed:config_file.write_text(json.dumps(config,indent=2)+'\n',encoding='utf-8')
+    doc=root/'docs';doc.mkdir(exist_ok=True)
+    workflow=doc/'WORKFLOW.md'
+    if not workflow.exists():workflow.write_text(SHARED,encoding='utf-8')
+    update_decision_protocol(workflow)
+    auto_note='''
+<!-- BEGIN AUTO-AGENT-LAUNCH (managed) -->
+## Automatic next-agent launch: interactive / mobile
+The watchdog switches between **interactive tmux terminal sessions**, not
+`codex exec` or `claude -p`. Codex runs `codex remote-control start`, then
+`codex --remote unix:// --cd "$PWD" --model <selected-model> -c model_reasoning_effort=<selected-effort> --yolo`. Claude uses
+`claude --model <selected-model> --effort <selected-effort> --dangerously-skip-permissions --rc`. Codex receives its initial prompt as a positional CLI argument. Claude starts with `--rc` without a positional argument (which would be interpreted as a Remote Control session name), then receives a short initial message in its verified idle `tmux` composer. Full rules remain in the project documents. Choose models and efforts at **watchdog launch time** with the interactive menu in `start-watchdog-window.ps1`. Choices are saved in `.agent-watchdog/models.json` and applied to every NEW watchdog-launched agent without running the installer again. The watcher must stay running.
+VS Code: Terminal > Run Task > `RelayWatch: Attach agent (Windows WSL)` if
+opened in Windows, or `RelayWatch: Attach agent (WSL)` from a WSL workspace.
+The terminal can be reattached after reopening the editor. On WSL2 the
+watchdog can open Windows Terminal automatically; on Linux/macOS a native
+terminal emulator is used when available. Automatic opening is skipped when no
+other terminal is attached. Close the window without killing the agent;
+use `-Command show` to open the existing agent in a new window on demand.
+Only a watchdog-owned, completed old tmux session will be switched. Unrelated
+terminals are not forcibly closed. No unattended deploys, pushes, commits,
+production changes are authorised.
+While a managed agent has verified usage under 90% used, never wait for a quota reset merely to conserve capacity. At 80–89%, prepare handoff materials while continuing small authorised local tasks; at 90% stop and yield. Never burn tokens artificially to reach 90%. If both providers lack quota after verified handoff, the verified handoff remains pending indefinitely. Keep polling; the first provider to regain >20% capacity resumes it, including the original provider after its quota resets. If both are available, prefer the other provider. Never invent quota figures.
+At each handover give a concise user-visible summary of completed/in-progress/next/blocked work, then CONTINUE WITH NEXT TASK. At each final handoff create a separate dated agent-authored summary in docs/session-reports/ covering work and verification THIS SESSION.
+If Claude or Codex telemetry fails for 60 seconds checkpoint work; after 180 seconds stop for a verified handoff + session summary. This is an uncertainty fallback, NOT a claim that quota is exhausted. Never switch an agent based only on a missing API reading.
+An explicit user pause wins over all automation. If paused, use `python3 .agent-watchdog/watchdog.py resume` or `watchdog-windows.ps1 -Command resume` only when the user wants to continue. Press Shift+M in the running watchdog console to change future model/effort presets; model changes do not interrupt the current agent.
+Codex may report 'Selected model is at capacity' even with healthy quota. The watchdog conservatively retries a stable, idle Codex prompt up to twice and alerts the user if the problem persists. It never silently changes the selected model or interrupts an active turn.
+If a user decision blocks all other safe work, record a needs-input file and signal NEEDS_USER_INPUT: so the watchdog alerts Windows desktop and ntfy on Android.
+**Full access risk:** Both requested flags bypass approval prompts. Use only
+in trusted projects. Codex remote daemon may fail to propagate --yolo;
+verify effective permissions in the CLI if unexpected errors occur.
+<!-- END AUTO-AGENT-LAUNCH (managed) -->
+'''
+    current_workflow=workflow.read_text(encoding='utf-8')
+    begin='<!-- BEGIN AUTO-AGENT-LAUNCH (managed) -->'
+    end_marker='<!-- END AUTO-AGENT-LAUNCH (managed) -->'
+    if begin in current_workflow:
+        a=current_workflow.index(begin)
+        b=current_workflow.index(end_marker,a)+len(end_marker)
+        workflow.write_text(current_workflow[:a]+auto_note.strip()+current_workflow[b:],encoding='utf-8')
+    else:
+        with workflow.open('a',encoding='utf-8') as f:f.write('\n'+auto_note)
+    # Preserve other VS Code tasks and settings. JSONC is left unmodified.
+    taskfile=root/'.vscode'/'tasks.json'
+    taskfile.parent.mkdir(exist_ok=True)
+    tasks={'version':'2.0.0','tasks':[]}
+    if taskfile.exists():
+        try:
+            tasks=json.loads(taskfile.read_text(encoding='utf-8'))
+            if not isinstance(tasks,dict) or not isinstance(tasks.get('tasks'),list):
+                raise ValueError('Invalid tasks.json')
+        except json.JSONDecodeError:
+            print('Existing tasks.json uses JSONC; leaving untouched. See README for tmux attach command.')
+            tasks=None
+    if tasks is not None:
+        from runner import session_name
+        session=session_name(root)
+        attach_cmd=f'cd {shlex.quote(str(root))} && tmux attach-session -t {shlex.quote(session)}'
+        common={'isBackground':True,'problemMatcher':[],
+                'presentation':{'reveal':'always','focus':True,'panel':'dedicated','clear':False}}
+        generated=[
+            {'label':'RelayWatch: Attach agent (Windows WSL)', 'type':'process',
+             'command':'wsl.exe','args':['-d',config.get('wsl_distro','Debian'),'--','bash','-ic',attach_cmd],**common},
+            {'label':'RelayWatch: Attach agent (WSL)', 'type':'process',
+             'command':'bash','args':['-ic',attach_cmd],**common},
+            {'label':'RelayWatch: Attach agent (Linux / macOS)', 'type':'process',
+             'command':'tmux','args':['attach-session','-t',session],**common}
+        ]
+        original=[t for t in tasks['tasks'] if not (isinstance(t,dict) and t.get('label','').startswith('RelayWatch: Attach agent'))]
+        tasks['tasks']=original+generated
+        taskfile.write_text(json.dumps(tasks,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+    handoff=doc/'HANDOFF.md'
+    if not handoff.exists():handoff.write_text(HANDOFF.format(legacy=historical_handoff(root)),encoding='utf-8')
+    (doc/'session-handoffs').mkdir(exist_ok=True)
+    (doc/'session-reports').mkdir(exist_ok=True)
+    append_managed(root/'CLAUDE.md',CLAUDE_SECTION)
+    append_managed(root/'AGENTS.md',CLAUDE_SECTION)
+    q=shlex.quote
+    for agent,path in (('claude',root/'.claude'/'settings.local.json'),('codex',root/'.codex'/'hooks.json')):
+        cmd=f'python3 {q(str(dest / "hook.py"))} --agent {agent} --project {q(str(root))}'
+        events=('SessionStart','PreToolUse','PostToolUse','UserPromptSubmit','Stop')
+        if agent=='claude':
+            events+=('PermissionRequest','Notification','Elicitation')
+        merge_hook_file(path,cmd,events)
+    # Antigravity's hook schema is separate from Claude's and scoped to
+    # this workspace. Do not change global ~/.gemini settings or permission
+    # policy. Existing, unrelated .agents/hooks.json integrations survive.
+    agy_cmd=f'python3 {q(str(dest / "gemini_attention.py"))} --project {q(str(root))}'
+    merge_gemini_hooks_file(root/'.agents'/'hooks.json',agy_cmd)
+    # Do not forcibly overwrite project-level user model preferences on install.
+    # Model/effort choices for *managed* launches are selected at runtime by
+    # model_picker.py, stored separately from project/CLI global settings.
+    # Existing v1.8 project defaults are left untouched on upgrade.
+    ignore=root/'.gitignore'
+    block='''# Local RelayWatch runtime (never commit usage/state logs)
+.agent-watchdog/config.json
+.agent-watchdog/managed-files.json
+.agent-watchdog/auto-update.lock
+.agent-watchdog/models.json
+.agent-watchdog/model-catalog-cache.json
+.agent-watchdog/usage-*.json
+.agent-watchdog/notified-*.json
+.agent-watchdog/active-codex.json
+.agent-watchdog/codex-queued.json
+.agent-watchdog/missing-handoff-alert.json
+.agent-watchdog/ready-*.json
+.agent-watchdog/worker.json
+.agent-watchdog/launch-history.json
+.agent-watchdog/launch.lock
+.agent-watchdog/logs/
+.agent-watchdog/next-agent-prompt.txt
+.agent-watchdog/auto-continue-state.json
+.agent-watchdog/PAUSE_AUTO_CONTINUE
+.agent-watchdog/pause-state.json
+.agent-watchdog/resume-delivery.json
+.agent-watchdog/needs-input.json
+.agent-watchdog/alert-delivery.json
+.agent-watchdog/codex-questions.json
+.agent-watchdog/codex-visible-questions.json
+.agent-watchdog/claude-questions.json
+.agent-watchdog/claude-attention.json
+.agent-watchdog/gemini-worker.json
+.agent-watchdog/gemini-usage.json
+.agent-watchdog/gemini-attention.json
+.agent-watchdog/gemini-weekly-warning.json
+.agent-watchdog/daybreak-recovery.json
+.agent-watchdog/outage-claude.json
+.agent-watchdog/outage-codex.json
+'''
+    old=ignore.read_text(encoding='utf-8') if ignore.exists() else ''
+    new_lines=[line for line in block.splitlines() if line and not line.startswith('#') and line not in old.splitlines()]
+    if new_lines:
+        ignore.write_text(old.rstrip()+'\n\n# Agent watchdog local runtime\n'+'\n'.join(new_lines)+'\n',encoding='utf-8')
+    print(f'Installed in {root}')
+    print('Launch-time model selector: start-watchdog-window.ps1 (not installed defaults)')
+    print('Gemini 4 Argon: shown in dashboard; Shift+M chooses manual High/Medium preset; install agy in this WSL distro')
+    print('Missing-worker recovery: automatic when a single live CLI is verified in the managed tmux session')
+    print('Manual worker recovery: watchdog-windows.ps1 -Command recover-session')
+    print('Exited-terminal handoff recovery: -Command ready -Agent codex -ConfirmComplete (verify handoff first)')
+    print('Native Claude hooks: .claude/settings.local.json')
+    print('Live model changes: press Shift+M in the watchdog console (or use -Command models)')
+    print('Telemetry fallback: checkpoint after 60s unavailable; halt for verified handoff after 180s')
+    print('Session summaries: docs/session-reports/ (at each completed handoff)')
+    print('Native Codex hooks: .codex/hooks.json (Codex must trust this repository)')
+    print('Persistent instructions: CLAUDE.md + AGENTS.md + docs/WORKFLOW.md')
+    print('Initial handoff: docs/HANDOFF.md (existing handoffs preserved)')
+    print('User pause: say PAUSE/WAIT or -Command pause; -Command resume safely continues an idle managed agent; -Command unpause only clears the latch')
+    print('Auto-continue after completed tasks: enabled (managed agent Stop hook, with safety guards)')
+    print('Final-handoff acknowledgement: native Stop hook OR python3 .agent-watchdog/watchdog.py ready --agent codex|claude')
+    print('Codex model-capacity recovery: enabled for idle managed TUI (bounded retries + alerts)')
+    print('User-blocker alerts: immediate native Stop alert plus live Claude/Codex question monitors; desktop + ntfy (if enabled)')
+    print('Codex Daybreak refusal: notified; phone conversation auto-acknowledges retry (no PowerShell needed; no blind /daybreak injection)')
+    print('Phone topic setup: python3 .agent-watchdog/watchdog.py notify-setup')
+    print('Notification test: python3 .agent-watchdog/watchdog.py notify-test')
+    print('Start watcher: python3 .agent-watchdog/watchdog.py run')
+    print('Check quota parser: python3 .agent-watchdog/watchdog.py once')
+    print('Auto-start of the next interactive tmux CLI:', 'enabled' if config.get('auto_launch_next_agent') else 'disabled', '(watcher must be running)')
+    print('For existing completed Claude handoff: python3 .agent-watchdog/watchdog.py launch-codex')
+    print('Terminal: uses Windows Terminal on WSL2 or a native terminal on Linux/macOS when available')
+    print('Open current agent now: watchdog-windows.ps1 -Command show')
+    print('Attach from VS Code: Terminal > Run Task > RelayWatch: Attach agent (Windows WSL / WSL)')
+    print('Install tmux with apt, dnf, pacman or Homebrew for your platform')
+    print('Models and effort choices apply to NEW managed agents, not currently running CLI sessions.')
+    print('IMPORTANT: Restart Claude and Codex sessions to load updated hooks.')
+
+
+def main():
+    p=argparse.ArgumentParser(description='Install dual-agent handoff watchdog into existing repo')
+    p.add_argument('--project',type=Path,default=Path.cwd())
+    p.add_argument('--enable-auto-launch',action='store_true',help='opt in to automatic agent launches')
+    p.add_argument('--unrestricted',action='store_true',help='opt in to CLI permission-bypass flags (unsafe for untrusted repositories)')
+    args=p.parse_args()
+    try:
+        install(args.project)
+        cfg_path=args.project.resolve()/'.agent-watchdog'/'config.json'
+        if args.enable_auto_launch or args.unrestricted:
+            cfg=json.loads(cfg_path.read_text(encoding='utf-8'))
+            if args.enable_auto_launch:cfg['auto_launch_next_agent']=True
+            if args.unrestricted:cfg['unrestricted_mode']=True
+            cfg_path.write_text(json.dumps(cfg,indent=2)+'\n',encoding='utf-8')
+            print('Opt-in settings written to gitignored project configuration.')
+    except Exception as exc:print('ERROR:',exc,file=sys.stderr);sys.exit(1)
+if __name__=='__main__':main()
+)],
+        'PostToolUse':[entry('PostToolUse','^(ask_question|ask_permission)
+    files=[]
+    for p in root.glob('docs/*.md'):
+        if p.name in ('HANDOFF.md','WORKFLOW.md'):continue
+        n=p.name.lower()
+        if any(w in n for w in ('handoff','next-claude','next-codex','founders-polish')):files.append(p)
+    if not files:
+        for p in root.glob('*.md'):
+            if any(w in p.name.lower() for w in ('handoff','next-claude','next-codex')):files.append(p)
+    files.sort(key=lambda p:p.stat().st_mtime,reverse=True)
+    if files:return '\n'.join('- Historical file to verify: `'+str(p.relative_to(root))+'`' for p in files[:5])
+    return '- No historical handoff found; identify the project plan from existing docs and Git history.'
+
+
+def install(project):
+    root=project.resolve()
+    if not root.is_dir():raise ValueError(f'Project folder does not exist: {root}')
+    dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
+    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
+        shutil.copy2(SOURCE/fname,dest/fname)
+        # A Windows Git checkout may turn Bash LF endings into CRLF; this
+        # makes 'set -o pipefail' fail before a managed agent can start.
+        # Normalize *only* managed shell scripts before computing the ledger.
+        if fname.endswith('.sh'):
+            script=dest/fname
+            raw=script.read_bytes()
+            if b'\r\n' in raw:
+                script.write_bytes(raw.replace(b'\r\n',b'\n'))
+    # Updater uses this ledger to avoid overwriting locally modified managed code.
+    code_files = ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py',
+                  'desktop-alert.ps1','interactive-agent.sh','claude_startup.py',
+                  'open-agent-window.ps1','open-agent-window.sh','model_picker.py',
+                  'capacity.py','session_recovery.py','quota_outage.py','session_summary.py',
+                  'console_ui.py','cli_paths.py','codex_steer.py','reset_times.py',
+                  'pause_control.py','resume_agent.py','quota_behavior.py',
+                  'codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py',
                   'daybreak_watch.py','update_supervisor.py','VERSION')
     ledger = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in code_files}
     (dest/'managed-files.json').write_text(json.dumps(ledger,indent=2,sort_keys=True)+'\n',encoding='utf-8')
@@ -418,6 +691,255 @@ verify effective permissions in the CLI if unexpected errors occur.
 .agent-watchdog/claude-attention.json
 .agent-watchdog/gemini-worker.json
 .agent-watchdog/gemini-usage.json
+.agent-watchdog/gemini-attention.json
+.agent-watchdog/gemini-weekly-warning.json
+.agent-watchdog/daybreak-recovery.json
+.agent-watchdog/outage-claude.json
+.agent-watchdog/outage-codex.json
+'''
+    old=ignore.read_text(encoding='utf-8') if ignore.exists() else ''
+    new_lines=[line for line in block.splitlines() if line and not line.startswith('#') and line not in old.splitlines()]
+    if new_lines:
+        ignore.write_text(old.rstrip()+'\n\n# Agent watchdog local runtime\n'+'\n'.join(new_lines)+'\n',encoding='utf-8')
+    print(f'Installed in {root}')
+    print('Launch-time model selector: start-watchdog-window.ps1 (not installed defaults)')
+    print('Gemini 4 Argon: shown in dashboard; Shift+M chooses manual High/Medium preset; install agy in this WSL distro')
+    print('Missing-worker recovery: automatic when a single live CLI is verified in the managed tmux session')
+    print('Manual worker recovery: watchdog-windows.ps1 -Command recover-session')
+    print('Exited-terminal handoff recovery: -Command ready -Agent codex -ConfirmComplete (verify handoff first)')
+    print('Native Claude hooks: .claude/settings.local.json')
+    print('Live model changes: press Shift+M in the watchdog console (or use -Command models)')
+    print('Telemetry fallback: checkpoint after 60s unavailable; halt for verified handoff after 180s')
+    print('Session summaries: docs/session-reports/ (at each completed handoff)')
+    print('Native Codex hooks: .codex/hooks.json (Codex must trust this repository)')
+    print('Persistent instructions: CLAUDE.md + AGENTS.md + docs/WORKFLOW.md')
+    print('Initial handoff: docs/HANDOFF.md (existing handoffs preserved)')
+    print('User pause: say PAUSE/WAIT or -Command pause; -Command resume safely continues an idle managed agent; -Command unpause only clears the latch')
+    print('Auto-continue after completed tasks: enabled (managed agent Stop hook, with safety guards)')
+    print('Final-handoff acknowledgement: native Stop hook OR python3 .agent-watchdog/watchdog.py ready --agent codex|claude')
+    print('Codex model-capacity recovery: enabled for idle managed TUI (bounded retries + alerts)')
+    print('User-blocker alerts: immediate native Stop alert plus live Claude/Codex question monitors; desktop + ntfy (if enabled)')
+    print('Codex Daybreak refusal: notified; phone conversation auto-acknowledges retry (no PowerShell needed; no blind /daybreak injection)')
+    print('Phone topic setup: python3 .agent-watchdog/watchdog.py notify-setup')
+    print('Notification test: python3 .agent-watchdog/watchdog.py notify-test')
+    print('Start watcher: python3 .agent-watchdog/watchdog.py run')
+    print('Check quota parser: python3 .agent-watchdog/watchdog.py once')
+    print('Auto-start of the next interactive tmux CLI:', 'enabled' if config.get('auto_launch_next_agent') else 'disabled', '(watcher must be running)')
+    print('For existing completed Claude handoff: python3 .agent-watchdog/watchdog.py launch-codex')
+    print('Terminal: uses Windows Terminal on WSL2 or a native terminal on Linux/macOS when available')
+    print('Open current agent now: watchdog-windows.ps1 -Command show')
+    print('Attach from VS Code: Terminal > Run Task > RelayWatch: Attach agent (Windows WSL / WSL)')
+    print('Install tmux with apt, dnf, pacman or Homebrew for your platform')
+    print('Models and effort choices apply to NEW managed agents, not currently running CLI sessions.')
+    print('IMPORTANT: Restart Claude and Codex sessions to load updated hooks.')
+
+
+def main():
+    p=argparse.ArgumentParser(description='Install dual-agent handoff watchdog into existing repo')
+    p.add_argument('--project',type=Path,default=Path.cwd())
+    p.add_argument('--enable-auto-launch',action='store_true',help='opt in to automatic agent launches')
+    p.add_argument('--unrestricted',action='store_true',help='opt in to CLI permission-bypass flags (unsafe for untrusted repositories)')
+    args=p.parse_args()
+    try:
+        install(args.project)
+        cfg_path=args.project.resolve()/'.agent-watchdog'/'config.json'
+        if args.enable_auto_launch or args.unrestricted:
+            cfg=json.loads(cfg_path.read_text(encoding='utf-8'))
+            if args.enable_auto_launch:cfg['auto_launch_next_agent']=True
+            if args.unrestricted:cfg['unrestricted_mode']=True
+            cfg_path.write_text(json.dumps(cfg,indent=2)+'\n',encoding='utf-8')
+            print('Opt-in settings written to gitignored project configuration.')
+    except Exception as exc:print('ERROR:',exc,file=sys.stderr);sys.exit(1)
+if __name__=='__main__':main()
+)],
+        'PreInvocation':[entry('PreInvocation')]}
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+
+
+def historical_handoff(root):
+    files=[]
+    for p in root.glob('docs/*.md'):
+        if p.name in ('HANDOFF.md','WORKFLOW.md'):continue
+        n=p.name.lower()
+        if any(w in n for w in ('handoff','next-claude','next-codex','founders-polish')):files.append(p)
+    if not files:
+        for p in root.glob('*.md'):
+            if any(w in p.name.lower() for w in ('handoff','next-claude','next-codex')):files.append(p)
+    files.sort(key=lambda p:p.stat().st_mtime,reverse=True)
+    if files:return '\n'.join('- Historical file to verify: `'+str(p.relative_to(root))+'`' for p in files[:5])
+    return '- No historical handoff found; identify the project plan from existing docs and Git history.'
+
+
+def install(project):
+    root=project.resolve()
+    if not root.is_dir():raise ValueError(f'Project folder does not exist: {root}')
+    dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
+    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
+        shutil.copy2(SOURCE/fname,dest/fname)
+        # A Windows Git checkout may turn Bash LF endings into CRLF; this
+        # makes 'set -o pipefail' fail before a managed agent can start.
+        # Normalize *only* managed shell scripts before computing the ledger.
+        if fname.endswith('.sh'):
+            script=dest/fname
+            raw=script.read_bytes()
+            if b'\r\n' in raw:
+                script.write_bytes(raw.replace(b'\r\n',b'\n'))
+    # Updater uses this ledger to avoid overwriting locally modified managed code.
+    code_files = ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py',
+                  'desktop-alert.ps1','interactive-agent.sh','claude_startup.py',
+                  'open-agent-window.ps1','open-agent-window.sh','model_picker.py',
+                  'capacity.py','session_recovery.py','quota_outage.py','session_summary.py',
+                  'console_ui.py','cli_paths.py','codex_steer.py','reset_times.py',
+                  'pause_control.py','resume_agent.py','quota_behavior.py',
+                  'codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py',
+                  'daybreak_watch.py','update_supervisor.py','VERSION')
+    ledger = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in code_files}
+    (dest/'managed-files.json').write_text(json.dumps(ledger,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+    (dest/'README.md').write_text(README_POINTER,encoding='utf-8')
+    config_file=dest/'config.json'
+    if not config_file.exists():
+        config={'agents':{
+           'claude':{'url':'http://localhost:3790/get','used_pct_path':None},
+           'codex':{'url':'http://localhost:3789/get','used_pct_path':None}},
+           'prepare_remaining_pct':20,'handoff_remaining_pct':10,
+           'unrestricted_mode':False, 'cache_seconds':20,'stale_grace_seconds':120,
+           'telemetry_checkpoint_seconds':60,'telemetry_pause_seconds':180,
+           'enable_codex_queue':True,'active_session_seconds':120,
+           'auto_launch_next_agent':False,'auto_launch_grace_seconds':10,
+           'auto_open_terminal_window':True,'wsl_distro':__import__('os').environ.get('WSL_DISTRO_NAME','Debian'),
+           'auto_continue_turns':True, 'max_stalled_auto_continuations':2,
+           'capacity_recovery': {'enabled':True,'stable_seconds':20,'max_retries':2,'delays_seconds':[30,90]},
+           'alert_retry_seconds':120, 'alerts': {'desktop':True,'phone':{'enabled':False,'server':'https://ntfy.sh', 'topic':'relaywatch-'+secrets.token_hex(16),'include_question':False}}}
+        config_file.write_text(json.dumps(config,indent=2)+'\n',encoding='utf-8')
+    # Existing local config must be upgraded non-destructively.
+    config=json.loads(config_file.read_text(encoding='utf-8'))
+    changed=False
+    for key,value in [('auto_launch_next_agent',False),('auto_launch_grace_seconds',10),('handoff_alert_after_seconds',300),('auto_open_terminal_window',True),('wsl_distro','Debian'),('auto_continue_turns',True),('max_stalled_auto_continuations',2),('alert_retry_seconds',120),('telemetry_checkpoint_seconds',60),('telemetry_pause_seconds',180),('capacity_recovery',{'enabled':True,'stable_seconds':20,'max_retries':2,'delays_seconds':[30,90]})]:
+        if key not in config:config[key]=value;changed=True
+    if 'alerts' not in config:
+        config['alerts']={'desktop':True,'phone':{'enabled':False,'server':'https://ntfy.sh','topic':'relaywatch-'+secrets.token_hex(16),'include_question':False}}
+        changed=True
+    if changed:config_file.write_text(json.dumps(config,indent=2)+'\n',encoding='utf-8')
+    doc=root/'docs';doc.mkdir(exist_ok=True)
+    workflow=doc/'WORKFLOW.md'
+    if not workflow.exists():workflow.write_text(SHARED,encoding='utf-8')
+    update_decision_protocol(workflow)
+    auto_note='''
+<!-- BEGIN AUTO-AGENT-LAUNCH (managed) -->
+## Automatic next-agent launch: interactive / mobile
+The watchdog switches between **interactive tmux terminal sessions**, not
+`codex exec` or `claude -p`. Codex runs `codex remote-control start`, then
+`codex --remote unix:// --cd "$PWD" --model <selected-model> -c model_reasoning_effort=<selected-effort> --yolo`. Claude uses
+`claude --model <selected-model> --effort <selected-effort> --dangerously-skip-permissions --rc`. Codex receives its initial prompt as a positional CLI argument. Claude starts with `--rc` without a positional argument (which would be interpreted as a Remote Control session name), then receives a short initial message in its verified idle `tmux` composer. Full rules remain in the project documents. Choose models and efforts at **watchdog launch time** with the interactive menu in `start-watchdog-window.ps1`. Choices are saved in `.agent-watchdog/models.json` and applied to every NEW watchdog-launched agent without running the installer again. The watcher must stay running.
+VS Code: Terminal > Run Task > `RelayWatch: Attach agent (Windows WSL)` if
+opened in Windows, or `RelayWatch: Attach agent (WSL)` from a WSL workspace.
+The terminal can be reattached after reopening the editor. On WSL2 the
+watchdog can open Windows Terminal automatically; on Linux/macOS a native
+terminal emulator is used when available. Automatic opening is skipped when no
+other terminal is attached. Close the window without killing the agent;
+use `-Command show` to open the existing agent in a new window on demand.
+Only a watchdog-owned, completed old tmux session will be switched. Unrelated
+terminals are not forcibly closed. No unattended deploys, pushes, commits,
+production changes are authorised.
+While a managed agent has verified usage under 90% used, never wait for a quota reset merely to conserve capacity. At 80–89%, prepare handoff materials while continuing small authorised local tasks; at 90% stop and yield. Never burn tokens artificially to reach 90%. If both providers lack quota after verified handoff, the verified handoff remains pending indefinitely. Keep polling; the first provider to regain >20% capacity resumes it, including the original provider after its quota resets. If both are available, prefer the other provider. Never invent quota figures.
+At each handover give a concise user-visible summary of completed/in-progress/next/blocked work, then CONTINUE WITH NEXT TASK. At each final handoff create a separate dated agent-authored summary in docs/session-reports/ covering work and verification THIS SESSION.
+If Claude or Codex telemetry fails for 60 seconds checkpoint work; after 180 seconds stop for a verified handoff + session summary. This is an uncertainty fallback, NOT a claim that quota is exhausted. Never switch an agent based only on a missing API reading.
+An explicit user pause wins over all automation. If paused, use `python3 .agent-watchdog/watchdog.py resume` or `watchdog-windows.ps1 -Command resume` only when the user wants to continue. Press Shift+M in the running watchdog console to change future model/effort presets; model changes do not interrupt the current agent.
+Codex may report 'Selected model is at capacity' even with healthy quota. The watchdog conservatively retries a stable, idle Codex prompt up to twice and alerts the user if the problem persists. It never silently changes the selected model or interrupts an active turn.
+If a user decision blocks all other safe work, record a needs-input file and signal NEEDS_USER_INPUT: so the watchdog alerts Windows desktop and ntfy on Android.
+**Full access risk:** Both requested flags bypass approval prompts. Use only
+in trusted projects. Codex remote daemon may fail to propagate --yolo;
+verify effective permissions in the CLI if unexpected errors occur.
+<!-- END AUTO-AGENT-LAUNCH (managed) -->
+'''
+    current_workflow=workflow.read_text(encoding='utf-8')
+    begin='<!-- BEGIN AUTO-AGENT-LAUNCH (managed) -->'
+    end_marker='<!-- END AUTO-AGENT-LAUNCH (managed) -->'
+    if begin in current_workflow:
+        a=current_workflow.index(begin)
+        b=current_workflow.index(end_marker,a)+len(end_marker)
+        workflow.write_text(current_workflow[:a]+auto_note.strip()+current_workflow[b:],encoding='utf-8')
+    else:
+        with workflow.open('a',encoding='utf-8') as f:f.write('\n'+auto_note)
+    # Preserve other VS Code tasks and settings. JSONC is left unmodified.
+    taskfile=root/'.vscode'/'tasks.json'
+    taskfile.parent.mkdir(exist_ok=True)
+    tasks={'version':'2.0.0','tasks':[]}
+    if taskfile.exists():
+        try:
+            tasks=json.loads(taskfile.read_text(encoding='utf-8'))
+            if not isinstance(tasks,dict) or not isinstance(tasks.get('tasks'),list):
+                raise ValueError('Invalid tasks.json')
+        except json.JSONDecodeError:
+            print('Existing tasks.json uses JSONC; leaving untouched. See README for tmux attach command.')
+            tasks=None
+    if tasks is not None:
+        from runner import session_name
+        session=session_name(root)
+        attach_cmd=f'cd {shlex.quote(str(root))} && tmux attach-session -t {shlex.quote(session)}'
+        common={'isBackground':True,'problemMatcher':[],
+                'presentation':{'reveal':'always','focus':True,'panel':'dedicated','clear':False}}
+        generated=[
+            {'label':'RelayWatch: Attach agent (Windows WSL)', 'type':'process',
+             'command':'wsl.exe','args':['-d',config.get('wsl_distro','Debian'),'--','bash','-ic',attach_cmd],**common},
+            {'label':'RelayWatch: Attach agent (WSL)', 'type':'process',
+             'command':'bash','args':['-ic',attach_cmd],**common},
+            {'label':'RelayWatch: Attach agent (Linux / macOS)', 'type':'process',
+             'command':'tmux','args':['attach-session','-t',session],**common}
+        ]
+        original=[t for t in tasks['tasks'] if not (isinstance(t,dict) and t.get('label','').startswith('RelayWatch: Attach agent'))]
+        tasks['tasks']=original+generated
+        taskfile.write_text(json.dumps(tasks,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+    handoff=doc/'HANDOFF.md'
+    if not handoff.exists():handoff.write_text(HANDOFF.format(legacy=historical_handoff(root)),encoding='utf-8')
+    (doc/'session-handoffs').mkdir(exist_ok=True)
+    (doc/'session-reports').mkdir(exist_ok=True)
+    append_managed(root/'CLAUDE.md',CLAUDE_SECTION)
+    append_managed(root/'AGENTS.md',CLAUDE_SECTION)
+    q=shlex.quote
+    for agent,path in (('claude',root/'.claude'/'settings.local.json'),('codex',root/'.codex'/'hooks.json')):
+        cmd=f'python3 {q(str(dest / "hook.py"))} --agent {agent} --project {q(str(root))}'
+        events=('SessionStart','PreToolUse','PostToolUse','UserPromptSubmit','Stop')
+        if agent=='claude':
+            events+=('PermissionRequest','Notification','Elicitation')
+        merge_hook_file(path,cmd,events)
+    # Do not forcibly overwrite project-level user model preferences on install.
+    # Model/effort choices for *managed* launches are selected at runtime by
+    # model_picker.py, stored separately from project/CLI global settings.
+    # Existing v1.8 project defaults are left untouched on upgrade.
+    ignore=root/'.gitignore'
+    block='''# Local RelayWatch runtime (never commit usage/state logs)
+.agent-watchdog/config.json
+.agent-watchdog/managed-files.json
+.agent-watchdog/auto-update.lock
+.agent-watchdog/models.json
+.agent-watchdog/model-catalog-cache.json
+.agent-watchdog/usage-*.json
+.agent-watchdog/notified-*.json
+.agent-watchdog/active-codex.json
+.agent-watchdog/codex-queued.json
+.agent-watchdog/missing-handoff-alert.json
+.agent-watchdog/ready-*.json
+.agent-watchdog/worker.json
+.agent-watchdog/launch-history.json
+.agent-watchdog/launch.lock
+.agent-watchdog/logs/
+.agent-watchdog/next-agent-prompt.txt
+.agent-watchdog/auto-continue-state.json
+.agent-watchdog/PAUSE_AUTO_CONTINUE
+.agent-watchdog/pause-state.json
+.agent-watchdog/resume-delivery.json
+.agent-watchdog/needs-input.json
+.agent-watchdog/alert-delivery.json
+.agent-watchdog/codex-questions.json
+.agent-watchdog/codex-visible-questions.json
+.agent-watchdog/claude-questions.json
+.agent-watchdog/claude-attention.json
+.agent-watchdog/gemini-worker.json
+.agent-watchdog/gemini-usage.json
+.agent-watchdog/gemini-attention.json
+.agent-watchdog/gemini-weekly-warning.json
 .agent-watchdog/daybreak-recovery.json
 .agent-watchdog/outage-claude.json
 .agent-watchdog/outage-codex.json

@@ -124,14 +124,16 @@ def read(root, *, now=None):
     now=time.time() if now is None else now
     state=load_json(path(root), {}) or {}
     measured=state.get('measured_at')
+    groups=state.get('groups')
+    groups=groups if isinstance(groups,dict) else {}
     fresh=(isinstance(measured, (int, float)) and
            0 <= now-measured <= FRESH_SECONDS and
-           isinstance(state.get('groups'), dict))
+           bool(groups))
     return {'fresh': bool(fresh), 'measured_at': measured,
             'last_attempt_at': state.get('last_attempt_at'),
             'error': state.get('error'),
             'cli_version': state.get('cli_version'),
-            'groups': state.get('groups') or {}}
+            'groups': groups}
 
 
 def refresh(root, config=None, *, now=None, force=False, run=None, locate=None):

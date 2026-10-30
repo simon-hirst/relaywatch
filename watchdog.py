@@ -7,6 +7,7 @@ from engine import PROMPT_HANDOFF, PROMPT_PREP, load_json, atomic_write_json, up
 from usage import paths_only, metrics_from_json
 from gemini_session import launch as launch_gemini, show as show_gemini, status as gemini_status, blocks_auto_handoff
 from gemini_usage import refresh as refresh_gemini_quota, read as read_gemini_quota, argon_weekly_only_pro
+from gemini_attention import warn_at_ten as warn_gemini_ten, check_visible as check_gemini_attention
 from runner import maybe_launch, check_worker_startup, explicit_codex, latest_worker, pid_running, tmux_exists, show_agent_window, mark_ready, ready_path, session_name, launch_lock, handoff_is_real
 from alerts import notify_pending_question, send_event, pending_question, is_auto_stall
 from capacity import check as capacity_check, state_path as capacity_state_path
@@ -256,6 +257,19 @@ def poll(root,config,*,enable_launch=False):
             messages.append('GEMINI USAGE UNAVAILABLE: '+str(new_gemini['error'])[:180])
     except Exception as exc:
         messages.append('GEMINI USAGE MONITOR ERROR: '+type(exc).__name__)
+    # Gemini has a separate WEEKLY quota. Advisory-only: 10% remaining
+    # triggers a saved handoff warning; there is no 20% Gemini preparation
+    # threshold, auto-switch, injected tmux keystroke, or permission change.
+    try:
+        warning=warn_gemini_ten(root,config,read_gemini_quota(root))
+        if warning:messages.append(warning)
+    except Exception as exc:
+        messages.append('GEMINI WEEKLY WARNING ERROR: '+type(exc).__name__)
+    try:
+        visible=check_gemini_attention(root,config)
+        if visible:messages.append(visible)
+    except Exception as exc:
+        messages.append('GEMINI ATTENTION MONITOR ERROR: '+type(exc).__name__)
     if blocks_auto_handoff(root):
         messages.append('GEMINI MANAGED: Antigravity session active; Claude/Codex handoff suspended')
     started=maybe_launch(root,config,usages) if enable_launch and not user_paused else None

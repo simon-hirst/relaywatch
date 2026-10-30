@@ -251,8 +251,13 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
             model_id=saved()['gemini']['model']
             if model_id not in MODEL_IDS.values():
                 return 'not launched: invalid saved Gemini Argon model selection'
+            # The new tmux shell may start running before Python persists
+            # worker.json. Gate it on the exact event before Agy's first turn.
+            gate=('python3 '+shlex.quote(str(wd(root)/'gemini_startup.py'))
+                  +' gate --project '+shlex.quote(str(root))
+                  +' --event-id '+shlex.quote(str(event['event_id'])))
             inner=('export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.bun/bin:$PATH"; '
-                   +shlex.quote(str(agy))+' --model '+shlex.quote(model_id)
+                   +gate+' && '+shlex.quote(str(agy))+' --model '+shlex.quote(model_id)
                    +' --remote-control -i '+shlex.quote(auto_prompt()))
         else:
             prompt_file=wd(root)/'next-agent-prompt.txt'
@@ -314,6 +319,10 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
                 'type':'tmux','model':model_id,'started_at':worker['started_at'],
                 'quota':'monitored','outcome':'launched','automatic':True})
         atomic_write_json(wd(root)/'worker.json',worker)
+        if target=='gemini':
+            from gemini_startup import start as mark_gemini_start
+            mark_gemini_start(root,event_id=event['event_id'],
+                              session=session,window=window)
         history[event['event_id']]={'target':target,'outcome':'launched','timestamp':worker['started_at'],'session':session}
         atomic_write_json(wd(root)/'launch-history.json',history)
         # Leave source-provider decisions intact until the receiving CLI is

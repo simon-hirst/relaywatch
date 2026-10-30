@@ -95,7 +95,7 @@ def launch(root, config, *, model=DEFAULT_MODEL, invoke=None, which=None,
                   'Leave a clear final handoff before exiting.')
         model_id = MODEL_IDS[model]
         # -i is documented as prompt-interactive. Do not use -p/--print.
-        command = ('exec agy --model ' + shlex.quote(model_id) +
+        command = ('agy --model ' + shlex.quote(model_id) +
                    ' --remote-control -i ' + shlex.quote(prompt))
         shell = (command + '; rc=$?; printf "\\n[relaywatch] Gemini exited with status %s. '
                  'Terminal retained.\\n" "$rc"; exec bash -i')

@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.19.0 — Optional Gemini 4 Argon / Antigravity CLI (2026-10-30)
+
+- Add opt-in interactive Gemini 4 Argon High/Medium sessions using Google's Antigravity CLI (`agy`) with Remote Control and shared handoff documentation.
+- Add Windows/WSL and native command entrypoints for `launch-gemini`, `show-gemini` and `gemini-status`, with saved tmux metadata and visible connection support.
+- Prevent concurrent Gemini and Claude/Codex managed launches, preserving active work and refusing to replace or kill another CLI.
+- Display Gemini as an optional managed session with unknown quota; automatic Claude/Codex switching pauses while Gemini owns the checkout.
+- Add installer/auto-update manifest support and regression tests; retain existing Claude/Codex quota thresholds and handoff logic.
+- Do not invent Gemini 5-hour/weekly allowance figures: the published Antigravity CLI `/usage` interface is interactive, so automatic quota-based Gemini switching remains disabled until a reliable supported API is available.
+
 ## v3.18.4 — Claude side-agent and permission prompts (2026-10-28)
 
 - Alert for Claude Code's immediate tool permission requests, including those from managed background subagents, without automatically approving them.

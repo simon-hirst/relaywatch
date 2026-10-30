@@ -320,7 +320,7 @@ def install(project):
            'unrestricted_mode':False, 'cache_seconds':20,'stale_grace_seconds':120,
            'telemetry_checkpoint_seconds':60,'telemetry_pause_seconds':180,
            'enable_codex_queue':True,'active_session_seconds':120,
-           'auto_launch_next_agent':False,'auto_launch_grace_seconds':10,
+           'auto_launch_next_agent':False,'auto_launch_gemini_fallback':True,'auto_launch_grace_seconds':10,
            'auto_open_terminal_window':True,'wsl_distro':__import__('os').environ.get('WSL_DISTRO_NAME','Debian'),
            'auto_continue_turns':True, 'max_stalled_auto_continuations':2,
            'capacity_recovery': {'enabled':True,'stable_seconds':20,'max_retries':2,'delays_seconds':[30,90]},
@@ -329,7 +329,7 @@ def install(project):
     # Existing local config must be upgraded non-destructively.
     config=json.loads(config_file.read_text(encoding='utf-8'))
     changed=False
-    for key,value in [('auto_launch_next_agent',False),('auto_launch_grace_seconds',10),('handoff_alert_after_seconds',300),('auto_open_terminal_window',True),('wsl_distro','Debian'),('auto_continue_turns',True),('max_stalled_auto_continuations',2),('alert_retry_seconds',120),('telemetry_checkpoint_seconds',60),('telemetry_pause_seconds',180),('capacity_recovery',{'enabled':True,'stable_seconds':20,'max_retries':2,'delays_seconds':[30,90]})]:
+    for key,value in [('auto_launch_next_agent',False),('auto_launch_gemini_fallback',True),('auto_launch_grace_seconds',10),('handoff_alert_after_seconds',300),('auto_open_terminal_window',True),('wsl_distro','Debian'),('auto_continue_turns',True),('max_stalled_auto_continuations',2),('alert_retry_seconds',120),('telemetry_checkpoint_seconds',60),('telemetry_pause_seconds',180),('capacity_recovery',{'enabled':True,'stable_seconds':20,'max_retries':2,'delays_seconds':[30,90]})]:
         if key not in config:config[key]=value;changed=True
     if 'alerts' not in config:
         config['alerts']={'desktop':True,'phone':{'enabled':False,'server':'https://ntfy.sh','topic':'relaywatch-'+secrets.token_hex(16),'include_question':False}}
@@ -468,7 +468,8 @@ verify effective permissions in the CLI if unexpected errors occur.
         ignore.write_text(old.rstrip()+'\n\n# Agent watchdog local runtime\n'+'\n'.join(new_lines)+'\n',encoding='utf-8')
     print(f'Installed in {root}')
     print('Launch-time model selector: start-watchdog-window.ps1 (not installed defaults)')
-    print('Gemini 4 Argon: shown in dashboard; Shift+M chooses manual High/Medium preset; install agy in this WSL distro')
+    print('Gemini Argon fallback: automatically eligible after verified Claude/Codex handoff when BOTH lack >20% quota and fresh Argon WEEKLY quota exceeds 10%; requires agy, auto-launch enabled')
+    print('Gemini warning: only at <=10% remaining weekly; no 20% warning and no forced switch out of active Argon')
     print('Missing-worker recovery: automatic when a single live CLI is verified in the managed tmux session')
     print('Manual worker recovery: watchdog-windows.ps1 -Command recover-session')
     print('Exited-terminal handoff recovery: -Command ready -Agent codex -ConfirmComplete (verify handoff first)')

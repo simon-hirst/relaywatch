@@ -149,8 +149,10 @@ on-demand reading.
 provide an **Argon-specific weekly** bucket but no Argon-specific 5-hour
 bucket, even while the general "Gemini Models" group has a five-hour bucket.
 RelayWatch only displays verified Argon limits from the "Gemini 4 Argon"
-group and shows Argon 5H as **not reported / unknown** unless that exact
-group later provides a 5H bucket. All cached readings become stale after
+group. When the CLI reports the Pro-specific `gemini-argon-wtu-weekly`
+bucket with no Argon 5H bucket, the dashboard labels this arrangement
+**Weekly-only (Pro)**. For other layouts without a reported Argon 5H
+bucket, that limit remains **unknown** rather than being invented. All cached readings become stale after
 five minutes; failed commands or malformed responses never create invented
 quota percentages or reset times. No secret tokens or raw CLI output are
 saved.

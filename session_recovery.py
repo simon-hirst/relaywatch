@@ -149,6 +149,14 @@ def _active_cli_kind(argv):
         # merely contains the string "codex" or "claude".
         script = argv[1].replace('\\', '/').lower()
         script_name = Path(script).name
+        # Some Agy installations re-exec through Node instead of retaining
+        # an "agy" executable in /proc. Match only known package-scoped CLI
+        # entrypoints, never arbitrary project files named cli.js.
+        if (('/antigravity-cli/' in script or '/@google/antigravity/' in script)
+                and script_name in ('cli.js','cli.mjs','index.js')):
+            if len(arguments)>1 and arguments[1] in ('-p','--print','--version','-v','--help','-h','remote-control','models','update','doctor'):
+                return None
+            return 'gemini'
         if script_name in ('codex', 'codex.js') or ('/@openai/codex/' in script and script_name in ('cli.js', 'codex.mjs')):
             if len(arguments) > 1 and arguments[1] in ('app-server', 'remote-control', 'mcp-server', 'completion', '--version', '-v', '--help', '-h'):
                 return None

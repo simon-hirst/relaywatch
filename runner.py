@@ -196,6 +196,9 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
     """
     root=Path(root).resolve();target=event.get('target')
     if paused(root):return 'not launched: paused explicitly by the user'
+    from gemini_session import blocks_auto_handoff
+    if blocks_auto_handoff(root):
+        return 'not launched: Gemini interactive session is active; do not start another coding agent'
     if target not in ('claude','codex'):return 'not launched: invalid receiving agent'
     if not handoff_is_real(root):return 'not launched: handoff is absent or still installer placeholder'
     if not isinstance(usage,dict) or usage.get('agent')!=target or usage.get('stale') or usage.get('stage') in ('unknown','handoff','prepare'):

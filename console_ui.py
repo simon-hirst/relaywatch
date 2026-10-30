@@ -67,8 +67,10 @@ class ConsoleUI:
         chosen=saved()
         def describe(a):return f'{chosen[a]["model"]}/{chosen[a]["effort"]}'
         hotkey='Shift+M: change models/efforts' if self.available else 'change models: watchdog-windows.ps1 -Command models'
-        gemini=saved()['gemini']['model'].rsplit('-',1)[-1].title()
-        return f'━━ {hotkey}  |  Claude {describe("claude")}  |  Codex {describe("codex")}  |  Gemini Argon {gemini} (manual)  ━━'
+        # Keep this single-line TTY footer bounded; Gemini has a dedicated
+        # permanent dashboard row, so adding it here would truncate the
+        # closing delimiter on 80-column terminals.
+        return f'━━ {hotkey}  |  Claude {describe("claude")}  |  Codex {describe("codex")}  ━━'
 
     def clear_footer(self):
         """Remove the lone footer *on screen*, leaving no historical copies.

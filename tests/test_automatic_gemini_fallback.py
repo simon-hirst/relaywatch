@@ -123,6 +123,9 @@ class AutomaticArgonFallbackTests(unittest.TestCase):
                              '5h':{'remaining_fraction':1}}}}):
             with self.subTest(snapshot=snapshot):
                 self.assertFalse(automatic_eligible(snapshot))
+                # Each subtest represents a new observed waiting episode;
+                # RelayWatch intentionally deduplicates repeated wait logs.
+                (self.root/'.agent-watchdog/pending-quota.json').unlink(missing_ok=True)
                 self.assertIn('WAITING for quota',self.launch_with(snapshot=snapshot))
                 self.assertEqual(self.commands,[])
 

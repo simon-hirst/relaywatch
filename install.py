@@ -427,6 +427,7 @@ verify effective permissions in the CLI if unexpected errors occur.
         ignore.write_text(old.rstrip()+'\n\n# Agent watchdog local runtime\n'+'\n'.join(new_lines)+'\n',encoding='utf-8')
     print(f'Installed in {root}')
     print('Launch-time model selector: start-watchdog-window.ps1 (not installed defaults)')
+    print('Gemini 4 Argon: shown in dashboard; Shift+M chooses manual High/Medium preset; install agy in this WSL distro')
     print('Missing-worker recovery: automatic when a single live CLI is verified in the managed tmux session')
     print('Manual worker recovery: watchdog-windows.ps1 -Command recover-session')
     print('Exited-terminal handoff recovery: -Command ready -Agent codex -ConfirmComplete (verify handoff first)')

@@ -171,7 +171,8 @@ def _capture(window, *, run=subprocess.run):
 def _notify(root,config,state,*,sender=send_event):
     if state.get('alerted'):
         return state
-    result=sender(root,config,'Antigravity initial handoff needs attention',
+    try:
+        result=sender(root,config,'Antigravity initial handoff needs attention',
                   'Gemini opened, but RelayWatch could not verify its first model turn. '
                   'Open the managed Antigravity terminal or Remote Control, check '
                   'whether the handoff was already submitted, and if idle send: '
@@ -179,6 +180,8 @@ def _notify(root,config,state,*,sender=send_event):
                   'Gemini opened but its first task is unverified. Check the terminal '
                   'or Antigravity Remote Control. If idle, send: '
                   'Read docs/HANDOFF.md and continue with the next safe task.')
+    except Exception:
+        result={'desktop':'failed','phone':'failed'}
     return {**state,'alerted':True,
             'alert_delivery':{k:v for k,v in result.items() if k in ('desktop','phone')}}
 
@@ -196,12 +199,21 @@ def monitor(root,config, *, now=None, run=subprocess.run,
         return None
     state=load_json(receipt_path(root),{}) or {}
     worker=latest_worker(root)
-    if (state.get('state')=='confirmed' or not state
-            or worker.get('agent')!='gemini'
+    if (worker.get('agent')!='gemini'
             or worker.get('session')!=session_name(root)
-            or worker.get('event_id')!=state.get('event_id')
-            or worker.get('window')!=state.get('window')
+            or not worker.get('event_id') or not worker.get('window')
             or not active(root)):
+        return None
+    if not state:
+        # Adopt a v3.22.0 automatically launched Gemini without disturbing
+        # its current terminal. Only an unmistakably empty composer can be
+        # rescued; any working/ambiguous session triggers a user alert.
+        start(root,event_id=worker['event_id'],session=worker['session'],
+              window=worker['window'],now=worker.get('started_at'))
+        state=load_json(receipt_path(root),{}) or {}
+    if (state.get('state')=='confirmed'
+            or worker.get('event_id')!=state.get('event_id')
+            or worker.get('window')!=state.get('window')):
         return None
     when=time.time() if now is None else now
     age=when-state.get('started_at',when)

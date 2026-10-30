@@ -396,12 +396,13 @@ def check_worker_startup(root, *, now=None, detector=None):
 
 
 def maybe_launch(root,config,usages,*,now=None):
-    """Resume the latest unhandled handoff as soon as EITHER provider has quota.
+    """Resume a verified Claude/Codex handoff to a healthy provider.
 
-    The opposite provider takes priority when both are ready on the same poll.
-    However, if the opposite is exhausted and the previous provider resets first,
-    the previous provider resumes its own handoff in a *new* managed tmux window.
-    Pending markers do not expire: e.g. both providers can reset overnight.
+    Prefer the other Claude/Codex provider, then a recovered original, then
+    verified Argon WEEKLY quota as a safe fallback (>10% remaining). Gemini
+    enters in the existing managed tmux session only after a verified Stop
+    event; neither unverified CLI sessions nor user pauses are interrupted.
+    Pending markers do not expire while all receivers lack quota.
     """
     if paused(root) or not config.get('auto_launch_next_agent',False):return None
     # An explicitly launched Gemini coding TUI owns this checkout until closed.
@@ -441,6 +442,16 @@ def maybe_launch(root,config,usages,*,now=None):
     event=max(candidates,key=lambda e:e['created_at'])
     source=event['source'];other='codex' if source=='claude' else 'claude'
     eligible=[a for a in (other,source) if can_resume(a,usages.get(a),config.get('prepare_remaining_pct',20))]
+    # Only fall back to Argon when neither Claude nor Codex can resume.
+    # This is deliberately asymmetric: their ordinary >20% resumption
+    # rule stays intact; Gemini has its OWN weekly-only >10% guard.
+    argon_snapshot=None
+    if not eligible and config.get('auto_launch_gemini_fallback',True):
+        from gemini_usage import read as read_gemini_quota
+        from gemini_session import automatic_eligible, cli_path
+        argon_snapshot=read_gemini_quota(root)
+        if automatic_eligible(argon_snapshot) and cli_path():
+            eligible=['gemini']
     pending_file=wd(root)/'pending-quota.json'
     if not eligible:
         # Remember the pending event for diagnostics across watchdog restarts,
@@ -451,12 +462,20 @@ def maybe_launch(root,config,usages,*,now=None):
                  'since':previous.get('since',now) if previous.get('event_id')==event['event_id'] else now}
         if previous.get('event_id')!=event['event_id'] or previous.get('status')!='waiting':
             atomic_write_json(pending_file,waiting)
-            return f'WAITING for quota: neither {other} nor {source} has >20% remaining; will resume whichever is ready first'
+            return (f'WAITING for quota: neither {other} nor {source} has >20% '
+                    'remaining and Argon is not verified/available with >10% weekly '
+                    'remaining; monitoring for a safe receiver')
         return None
     chosen=eligible[0]
     # The preferred recipient is normally the other agent; when that provider
     # has no quota, the reset original provider is a valid recipient too.
-    result=launch(root,config,{**event,'target':chosen,'verified_stop':True},usages[chosen])
+    if chosen=='gemini':
+        week=argon_snapshot['groups']['Gemini 4 Argon']['weekly']
+        usage={'agent':'gemini','stage':'normal','stale':False,
+               'remaining_percent':week['remaining_percent']}
+    else:
+        usage=usages[chosen]
+    result=launch(root,config,{**event,'target':chosen,'verified_stop':True},usage)
     if result.startswith('CREATED'):
         atomic_write_json(pending_file,{'event_id':event['event_id'],
                           'source':source,'resumed_by':chosen,'status':'resumed',

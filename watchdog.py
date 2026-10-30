@@ -5,6 +5,7 @@ import argparse,json,re,subprocess,sys,time,urllib.request
 from pathlib import Path
 from engine import PROMPT_HANDOFF, PROMPT_PREP, load_json, atomic_write_json, update, state_path, current, handoff_current
 from usage import paths_only, metrics_from_json
+from gemini_session import launch as launch_gemini, show as show_gemini, status as gemini_status, blocks_auto_handoff
 from runner import maybe_launch, check_worker_startup, explicit_codex, latest_worker, pid_running, tmux_exists, show_agent_window, mark_ready, ready_path, session_name, launch_lock, handoff_is_real
 from alerts import notify_pending_question, send_event, pending_question, is_auto_stall
 from capacity import check as capacity_check, state_path as capacity_state_path
@@ -238,6 +239,10 @@ def poll(root,config,*,enable_launch=False):
             recovered=capacity_check(root,config,usages)
             if recovered:messages.append('CAPACITY RECOVERY '+recovered)
         except Exception as exc:messages.append('capacity recovery failed: '+type(exc).__name__+': '+str(exc))
+    # Gemini is opt-in and does not expose a verified machine-readable quota.
+    # Suspend Claude/Codex auto handoffs while an interactive Gemini TUI exists.
+    if blocks_auto_handoff(root):
+        messages.append('GEMINI MANAGED: Antigravity session active; quota UNKNOWN (check /usage); Claude/Codex handoff suspended')
     started=maybe_launch(root,config,usages) if enable_launch and not user_paused else None
     if started:messages.append('AUTO-HANDOFF '+started)
     if enable_launch:
@@ -439,8 +444,9 @@ def reconnect_existing_monitor(root, config):
 
 def main():
     parser=argparse.ArgumentParser(description='Local Claude Code + Codex handoff watchdog')
-    parser.add_argument('command',nargs='?',choices=('run','once','status','inspect','launch-codex','ready','recover-session','show','notify-test','notify-setup','pause','resume','resume-check','unpause','daybreak-continue','daybreak-restored','daybreak-status'),default='run')
+    parser.add_argument('command',nargs='?',choices=('run','once','status','inspect','launch-codex','launch-gemini','show-gemini','gemini-status','ready','recover-session','show','notify-test','notify-setup','pause','resume','resume-check','unpause','daybreak-continue','daybreak-restored','daybreak-status'),default='run')
     parser.add_argument('--agent',choices=('claude','codex'),default='claude')
+    parser.add_argument('--gemini-model',choices=('high','medium'),default='high')
     parser.add_argument('--interval',type=int,default=20)
     parser.add_argument('--retry',action='store_true',help='retry an already attempted manual Codex launch')
     parser.add_argument('--confirm-complete',action='store_true',help='I verified the final handoff after the managed CLI exited')
@@ -516,6 +522,20 @@ def main():
         print(result)
         if not result.startswith('HANDOFF READY'):sys.exit(1)
         return
+    if args.command=='launch-gemini':
+        result=launch_gemini(ROOT,config,model=args.gemini_model)
+        print(result)
+        if not result.startswith('CREATED'):sys.exit(1)
+        return
+    if args.command=='show-gemini':
+        result=show_gemini(ROOT,config)
+        print(result)
+        if not (result.startswith('Windows Terminal opened') or result.startswith('terminal opened')):sys.exit(1)
+        return
+    if args.command=='gemini-status':
+        print(json.dumps(gemini_status(ROOT),indent=2))
+        print('Quota is unknown to RelayWatch: open /usage in the Antigravity CLI.')
+        return
     if args.command=='launch-codex':
         from engine import current
         usage=current(ROOT,'codex',config,max_age=0)
@@ -529,6 +549,7 @@ def main():
         if not result.startswith('Windows Terminal opened'):sys.exit(1)
         return
     if args.command=='status':
+        print('GEMINI 4 ARGON:',json.dumps(gemini_status(ROOT),indent=2))
         print('USER PAUSE: '+('ACTIVE — automation suspended' if paused(ROOT) else 'not active'))
         daybreak=daybreak_current(ROOT)
         if daybreak:

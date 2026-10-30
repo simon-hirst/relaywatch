@@ -40,7 +40,7 @@ def example():
                   {'name':'Gemini 4 Argon','buckets':[
                        bucket('gemini-argon-wtu-weekly','weekly',
                               0.9889033436775208,'2026-11-06T00:55:35Z')]}
-                ]}}}}
+                ]}}}
 
 
 class GeminiQuotaTests(unittest.TestCase):

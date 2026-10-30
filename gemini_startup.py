@@ -43,7 +43,10 @@ _EMPTY_COMPOSER = re.compile(
 _DANGER_SCREEN = re.compile(
     r'(?i)\b(?:permission (?:required|request|needed)|'
     r'approval (?:required|needed)|requires your approval|'
-    r'login required|sign in required|choose an account|'
+    r'login required|sign in required|choose (?:your |an? )?account|'
+    r'select (?:your |an? )?account|authentication required|'
+    r'working(?:\.\.\.)?|thinking(?:\.\.\.)?|processing|generating|'
+    r'using tool|running (?:a |the )?tool|'
     r'press (?:enter|y) to (?:approve|authorize)|'
     r'allow once|always allow|deny|reject)\b'
 )
@@ -211,7 +214,7 @@ def monitor(root,config, *, now=None, run=subprocess.run,
         start(root,event_id=worker['event_id'],session=worker['session'],
               window=worker['window'],now=worker.get('started_at'))
         state=load_json(receipt_path(root),{}) or {}
-    if (state.get('state')=='confirmed'
+    if (state.get('state')=='confirmed' or state.get('alerted')
             or worker.get('event_id')!=state.get('event_id')
             or worker.get('window')!=state.get('window')):
         return None
@@ -221,11 +224,13 @@ def monitor(root,config, *, now=None, run=subprocess.run,
         return None
     # Mark one attempted rescue only if verified process and explicit idle
     # composer. Otherwise leave the UI untouched and alert after grace.
-    if (not state.get('attempted') and age>=WAIT_BEFORE_RESCUE):
+    if (not state.get('attempted') and not state.get('alerted')
+            and age>=WAIT_BEFORE_RESCUE):
         with launch_lock(root):
             state=load_json(receipt_path(root),{}) or {}
             worker=latest_worker(root)
             if (state.get('state')=='confirmed' or state.get('attempted')
+                    or state.get('alerted')
                     or worker.get('event_id')!=state.get('event_id')
                     or worker.get('window')!=state.get('window')
                     or not active(root)):

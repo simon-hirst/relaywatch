@@ -8,6 +8,7 @@ import os,select,sys,termios,tty,subprocess,shutil,re
 from pathlib import Path
 from model_picker import saved
 from gemini_session import cli_path
+from gemini_usage import read as read_gemini_quota
 from reset_times import local_timezone, format_reset_local
 from pause_control import paused
 from engine import load_json
@@ -242,7 +243,11 @@ class DashboardUI(ConsoleUI):
         if paused(self.root):
             return ('PAUSED BY USER — automation disabled; use -Command resume to continue','yellow')
         if self.gemini_active:
-            return ('Gemini 4 Argon active — quota unknown; check /usage in Antigravity','cyan')
+            quota=read_gemini_quota(self.root)
+            weekly=(quota.get('groups') or {}).get('Gemini 4 Argon',{}).get('weekly')
+            if quota['fresh'] and weekly:
+                return (f'Gemini active — Argon weekly {weekly["remaining_percent"]:.1f}% left; Argon 5H unknown','cyan')
+            return ('Gemini active — quota unavailable or stale; manual /usage recommended','yellow')
         worker=load_json(self.root/'.agent-watchdog'/'worker.json',{}) or {}
         if worker.get('startup_status')=='failed':
             return (f'{str(worker.get("agent","Agent")).capitalize()} startup failed — inspect the agent terminal', 'red')
@@ -280,6 +285,16 @@ class DashboardUI(ConsoleUI):
             if s.get('state')=='prepare':return (name+' preparing a handoff (80% used)','yellow')
             if s.get('state')=='handoff':return (name+' at handoff threshold (90% used)','red')
         return ('Quota monitoring active - changes apply at the next handoff','green')
+
+    @staticmethod
+    def _reset_ts(iso):
+        if not isinstance(iso,str):
+            return None
+        try:
+            from datetime import datetime
+            return datetime.fromisoformat(iso.replace('Z','+00:00')).timestamp()
+        except ValueError:
+            return None
 
     def _lines(self, columns):
         import time
@@ -333,16 +348,26 @@ class DashboardUI(ConsoleUI):
             rows.append((f'           {shown}', self._severity(stage)))
         chosen=saved()
         gemini_model=chosen['gemini']['model'].rsplit('-',1)[-1].title()
-        if self.gemini_active:
-            gemini_line=f'  GEMINI  Argon {gemini_model}  •  session active  •  quota unknown'
-            gemini_color='purple'
+        quota=read_gemini_quota(self.root)
+        argon=(quota.get('groups') or {}).get('Gemini 4 Argon',{})
+        weekly=argon.get('weekly')
+        five_hour=argon.get('5h')
+        active=' • session active' if self.gemini_active else ''
+        if quota['fresh'] and weekly:
+            line=(f'  GEMINI  Argon {gemini_model}{active}  •  weekly '
+                  f'{weekly["used_percent"]:.1f}% used  {weekly["remaining_percent"]:.1f}% left'
+                  f'  • {format_reset_local(self._reset_ts(weekly.get("reset_time")), self.display_zone)}')
+            rows.append((line, 'purple'))
+            if five_hour:
+                rows.append(('          Argon 5H  '+f'{five_hour["used_percent"]:.1f}% used'
+                            +f'  {five_hour["remaining_percent"]:.1f}% left', 'dim'))
+            else:
+                rows.append(('          Argon 5H  not reported by agy /usage (unknown)', 'dim'))
         elif cli_path():
-            gemini_line=f'  GEMINI  Argon {gemini_model}  •  CLI found, sign-in unverified  •  quota unknown'
-            gemini_color='dim'
+            state='usage stale/unavailable' if quota.get('measured_at') else 'awaiting usage reading'
+            rows.append((f'  GEMINI  Argon {gemini_model}{active}  •  CLI found, sign-in unverified  •  {state}', 'yellow'))
         else:
-            gemini_line=f'  GEMINI  Argon {gemini_model}  •  agy missing in WSL  •  quota unknown'
-            gemini_color='yellow'
-        rows.append((gemini_line, gemini_color))
+            rows.append((f'  GEMINI  Argon {gemini_model}{active}  •  agy missing in WSL  •  quota unknown', 'yellow'))
         next_text,next_color=self._pending()
         rows.extend([(hr,'dim'),('  NEXT  '+next_text,next_color),(hr,'dim')])
         claude=chosen['claude'];codex=chosen['codex']

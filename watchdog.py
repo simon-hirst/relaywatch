@@ -6,6 +6,7 @@ from pathlib import Path
 from engine import PROMPT_HANDOFF, PROMPT_PREP, load_json, atomic_write_json, update, state_path, current, handoff_current
 from usage import paths_only, metrics_from_json
 from gemini_session import launch as launch_gemini, show as show_gemini, status as gemini_status, blocks_auto_handoff
+from gemini_usage import refresh as refresh_gemini_quota, read as read_gemini_quota
 from runner import maybe_launch, check_worker_startup, explicit_codex, latest_worker, pid_running, tmux_exists, show_agent_window, mark_ready, ready_path, session_name, launch_lock, handoff_is_real
 from alerts import notify_pending_question, send_event, pending_question, is_auto_stall
 from capacity import check as capacity_check, state_path as capacity_state_path
@@ -241,8 +242,22 @@ def poll(root,config,*,enable_launch=False):
         except Exception as exc:messages.append('capacity recovery failed: '+type(exc).__name__+': '+str(exc))
     # Gemini is opt-in and does not expose a verified machine-readable quota.
     # Suspend Claude/Codex auto handoffs while an interactive Gemini TUI exists.
+    # Poll the zero-token Antigravity /usage command at most once per
+    # configured interval (default 120s). Failure never affects Claude/Codex
+    # telemetry, permission decisions, or automated handoffs.
+    try:
+        old_gemini=read_gemini_quota(root)
+        new_gemini=refresh_gemini_quota(root,config)
+        argon=(new_gemini.get('groups') or {}).get('Gemini 4 Argon',{})
+        weekly=argon.get('weekly')
+        if (new_gemini['fresh'] and weekly and not old_gemini.get('fresh')):
+            messages.append(f'GEMINI ARGON VERIFIED: weekly {weekly["remaining_percent"]:.2f}% left; no Argon 5H bucket is assumed')
+        elif new_gemini.get('error') and new_gemini['error']!=old_gemini.get('error'):
+            messages.append('GEMINI USAGE UNAVAILABLE: '+str(new_gemini['error'])[:180])
+    except Exception as exc:
+        messages.append('GEMINI USAGE MONITOR ERROR: '+type(exc).__name__)
     if blocks_auto_handoff(root):
-        messages.append('GEMINI MANAGED: Antigravity session active; quota UNKNOWN (check /usage); Claude/Codex handoff suspended')
+        messages.append('GEMINI MANAGED: Antigravity session active; Claude/Codex handoff suspended')
     started=maybe_launch(root,config,usages) if enable_launch and not user_paused else None
     if started:messages.append('AUTO-HANDOFF '+started)
     if enable_launch:
@@ -536,8 +551,10 @@ def main():
         if not (result.startswith('Windows Terminal opened') or result.startswith('terminal opened')):sys.exit(1)
         return
     if args.command=='gemini-status':
-        print(json.dumps(gemini_status(ROOT),indent=2))
-        print('Quota is unknown to RelayWatch: open /usage in the Antigravity CLI.')
+        quota=refresh_gemini_quota(ROOT,config,force=True)
+        print(json.dumps({'session':gemini_status(ROOT),
+                          'quota':quota,
+                          'note':'Only buckets within Gemini 4 Argon belong to Argon; absent 5h is unknown.'},indent=2))
         return
     if args.command=='launch-codex':
         from engine import current

@@ -137,13 +137,31 @@ preserves the terminal for diagnostics when `agy` exits. The agent is not
 granted any permission bypass. Antigravity Remote Control can display the
 session on a phone or laptop and send its own browser notifications.
 
-**Current limitation:** Antigravity documents quota status in an interactive
-`/usage` panel, but no stable machine-readable quota endpoint is documented.
-RelayWatch therefore displays Gemini quota as **unknown**, and **does not**
-automatically hand off into or out of Gemini at 80/90%. While the Gemini
-session exists it suspends Claude/Codex automatic launches to prevent
-concurrent edits. To resume the two-agent rotation, finish the Gemini handoff
-and exit the Gemini terminal/session. No quota values are guessed.
+**Gemini 4 Argon usage monitoring:** Antigravity CLI v1.1.12+ supports
+`agy -p /usage --output-format json`. It returns a structured zero-turn,
+zero-token quota snapshot. The watchdog checks the installed `agy` version,
+polls at most once every 120 seconds, and caches validated quota percentages,
+UTC reset times, and freshness metadata in
+`.agent-watchdog/gemini-usage.json`. Run `gemini-status` for a fresh
+on-demand reading.
+
+**Important: separate quota groups.** Antigravity's Pro-tier response can
+provide an **Argon-specific weekly** bucket but no Argon-specific 5-hour
+bucket, even while the general "Gemini Models" group has a five-hour bucket.
+RelayWatch only displays verified Argon limits from the "Gemini 4 Argon"
+group and shows Argon 5H as **not reported / unknown** unless that exact
+group later provides a 5H bucket. All cached readings become stale after
+five minutes; failed commands or malformed responses never create invented
+quota percentages or reset times. No secret tokens or raw CLI output are
+saved.
+
+**Automatic rotation limitation:** Gemini quota is now monitored, but
+RelayWatch **does not** automatically hand off into or out of Gemini at
+80/90%, because verified quota is only one input: the Gemini CLI still
+needs reliable agent-turn completion, handoff and safety signals. While an
+interactive Gemini tmux session exists, Claude/Codex automatic launches
+remain suspended to prevent concurrent edits. Close the finished Gemini
+session only after preserving its handoff.
 
 ### Automatically install new releases
 

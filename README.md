@@ -111,10 +111,28 @@ RelayWatch supports **Gemini 4 Argon High and Medium** in the official
 your **Debian WSL** distro (or your native Linux/macOS environment) first,
 then check `agy models` includes `gemini-4-argon-high`.
 
-A Gemini session is started **manually and exclusively**. You must finish
-Claude/Codex's current task and verified handoff, then exit the previous
-managed CLI/tmux session before starting Gemini. RelayWatch refuses to launch
-Gemini while another managed coding session or process is still active.
+**Automatic fallback:** When RelayWatch's existing
+`auto_launch_next_agent` is enabled and **neither Claude nor Codex has more
+than 20% of its limiting quota remaining**, the next verified Claude/Codex
+Stop-hook handoff can be resumed by Gemini 4 Argon, provided the CLI is
+installed and signed in and its **own fresh weekly bucket reports >10%
+remaining**. No generic Gemini 5H quota is inferred. Argon opens a NEW
+interactive window in the SAME managed tmux session, keeping the attached
+Windows Terminal, Remote Control and native question/ntfy hooks. The source
+window is retired only as part of the existing verified handoff procedure.
+If a Claude/Codex quota recovers first, it retains priority over Argon.
+
+`auto_launch_gemini_fallback` defaults to `true` for existing auto-launch
+users, but can be set to `false` in the project's ignored
+`.agent-watchdog/config.json`. This is not a separate opt-in to agent
+automation: the parent `auto_launch_next_agent` must be enabled.
+**Nothing starts without an acknowledged source handoff**. Missing/stale
+quota, a missing CLI, user pause, unknown tmux ownership, or absent handoff
+means RelayWatch keeps waiting.
+
+**Manual launch remains available:** You can still start a separate Gemini
+session after safely finishing and closing the current Claude/Codex session.
+Manual mode refuses to start while another managed CLI is present.
 
 ```powershell
 # From the RelayWatch repo in Windows PowerShell:
@@ -157,13 +175,15 @@ five minutes; failed commands or malformed responses never create invented
 quota percentages or reset times. No secret tokens or raw CLI output are
 saved.
 
-**Automatic rotation limitation:** Gemini quota is now monitored, but
-RelayWatch **does not** automatically hand off into or out of Gemini at
-80/90%, because verified quota is only one input: the Gemini CLI still
-needs reliable agent-turn completion, handoff and safety signals. While an
-interactive Gemini tmux session exists, Claude/Codex automatic launches
-remain suspended to prevent concurrent edits. Close the finished Gemini
-session only after preserving its handoff.
+**Safe return-handoff limitation:** Argon **can receive** an automatic
+Claude/Codex quota handoff, but RelayWatch **does not automatically exit
+Argon or hand off back out** merely because another provider's quota resets.
+Antigravity still needs independent verified end-of-turn and completed
+handoff signals. The running Gemini session keeps ownership so the watchdog
+never interrupts in-progress editing or starts competing CLIs. When Gemini
+later finishes, preserve docs/HANDOFF.md, safely exit its CLI/session and
+return to the normal two-provider rotation. No forced exits or concurrent
+coding agents.
 
 ### Antigravity user-input alerts and 10% weekly handoff reminder
 
@@ -195,8 +215,9 @@ notifies the desktop and ntfy phone once for that weekly reset period
 (with per-channel retries if delivery fails). On its next model invocation
 the native `PreInvocation` hook inserts a single advisory reminder to update
 `docs/HANDOFF.md` and a dated session summary at a safe checkpoint.
-**There is NO Gemini warning at 20% remaining**, no automatic provider switch,
-no forced stop, and no interruption of an active conversation. Stale, absent,
+**There is NO Gemini warning at 20% remaining**, no forced switch *out
+of Gemini*, and no interruption of an active conversation. Automatic
+*entry* to Gemini is governed by the independent fallback rule above. Stale, absent,
 or malformed quota data never triggers this warning. Claude/Codex thresholds
 remain unchanged.
 

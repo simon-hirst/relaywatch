@@ -352,7 +352,7 @@ class DashboardUI(ConsoleUI):
         argon=(quota.get('groups') or {}).get('Gemini 4 Argon',{})
         weekly=argon.get('weekly')
         five_hour=argon.get('5h')
-        active=' • ACTIVE' if self.gemini_active else ''
+        active=' • session active' if self.gemini_active else ''
         if quota['fresh'] and weekly:
             line=(f'  GEMINI  Argon {gemini_model}{active}  •  weekly '
                   f'{weekly["used_percent"]:.1f}% used  {weekly["remaining_percent"]:.1f}% left'
@@ -365,7 +365,7 @@ class DashboardUI(ConsoleUI):
                 rows.append(('          Argon 5H  not reported by agy /usage (unknown)', 'dim'))
         elif cli_path():
             state='usage stale/unavailable' if quota.get('measured_at') else 'awaiting usage reading'
-            rows.append((f'  GEMINI  Argon {gemini_model}{active}  •  CLI found  •  {state}', 'yellow'))
+            rows.append((f'  GEMINI  Argon {gemini_model}{active}  •  CLI found, sign-in unverified  •  {state}', 'yellow'))
         else:
             rows.append((f'  GEMINI  Argon {gemini_model}{active}  •  agy missing in WSL  •  quota unknown', 'yellow'))
         next_text,next_color=self._pending()

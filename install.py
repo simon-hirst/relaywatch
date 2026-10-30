@@ -265,6 +265,7 @@ def merge_gemini_hooks_file(path, hook_cmd):
     data[key]={
         'PreToolUse':[entry('PreToolUse',matcher)],
         'PostToolUse':[entry('PostToolUse',matcher)],
+        'SessionStart':[entry('SessionStart')],
         'PreInvocation':[entry('PreInvocation')]}
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n',
@@ -289,7 +290,7 @@ def install(project):
     root=project.resolve()
     if not root.is_dir():raise ValueError(f'Project folder does not exist: {root}')
     dest=root/'.agent-watchdog';dest.mkdir(exist_ok=True)
-    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
+    for fname in ('engine.py','hook.py','usage.py','watchdog.py','runner.py','alerts.py','desktop-alert.ps1','interactive-agent.sh','claude_startup.py','open-agent-window.ps1','open-agent-window.sh','model_picker.py','capacity.py','session_recovery.py','quota_outage.py','session_summary.py','console_ui.py','cli_paths.py','codex_steer.py','reset_times.py','pause_control.py','resume_agent.py','quota_behavior.py','codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','gemini_startup.py','background_wait.py','daybreak_watch.py','update_supervisor.py','VERSION'):
         shutil.copy2(SOURCE/fname,dest/fname)
         # A Windows Git checkout may turn Bash LF endings into CRLF; this
         # makes 'set -o pipefail' fail before a managed agent can start.
@@ -306,7 +307,7 @@ def install(project):
                   'capacity.py','session_recovery.py','quota_outage.py','session_summary.py',
                   'console_ui.py','cli_paths.py','codex_steer.py','reset_times.py',
                   'pause_control.py','resume_agent.py','quota_behavior.py',
-                  'codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','background_wait.py',
+                  'codex_questions.py','claude_questions.py','claude_attention.py','gemini_session.py','gemini_usage.py','gemini_attention.py','gemini_startup.py','background_wait.py',
                   'daybreak_watch.py','update_supervisor.py','VERSION')
     ledger = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in code_files}
     (dest/'managed-files.json').write_text(json.dumps(ledger,indent=2,sort_keys=True)+'\n',encoding='utf-8')
@@ -458,6 +459,7 @@ verify effective permissions in the CLI if unexpected errors occur.
 .agent-watchdog/gemini-usage.json
 .agent-watchdog/gemini-attention.json
 .agent-watchdog/gemini-weekly-warning.json
+.agent-watchdog/gemini-startup.json
 .agent-watchdog/daybreak-recovery.json
 .agent-watchdog/outage-claude.json
 .agent-watchdog/outage-codex.json

@@ -175,6 +175,26 @@ five minutes; failed commands or malformed responses never create invented
 quota percentages or reset times. No secret tokens or raw CLI output are
 saved.
 
+**Verified initial task delivery:** The managed tmux window opening is
+NOT proof that Gemini got its first message. RelayWatch launches the documented
+interactive positional-prompt `agy --remote-control "<handoff>"` command only after the matching
+worker and startup receipt have been written. Native Antigravity
+`PreInvocation` confirms the first actual model invocation. If no invocation
+is observed after 35 seconds, RelayWatch checks the **exact** managed Gemini
+pane and live CLI identity. Only when the **native SessionStart hook has confirmed the new CLI**, and
+it sees a clearly **empty input composer**, with no permission/approval or
+ongoing-work indication, it submits
+a one-line handoff reminder by literal tmux keys, **once only**. No blind
+Enter keys, forced CLI restarts or concurrent coding agents. If it cannot
+prove the terminal is safe, RelayWatch does NOT type into it; after 75 seconds
+it sends a desktop/ntfy alert directing you to review and kick off the handoff
+manually. Already-running v3.22.0 Gemini sessions are adopted read-only and
+**not automatically typed into**, since they may have already processed a
+turn before the new hook was installed. Those sessions get an alert instead. The dashboard shows pending, submitted,
+confirmed or attention-required startup state, and `gemini-status` includes
+the sanitized receipt. CLI hooks may not be loaded into an older already-
+running Antigravity process until a new session starts.
+
 **Safe return-handoff limitation:** Argon **can receive** an automatic
 Claude/Codex quota handoff, but RelayWatch **does not automatically exit
 Argon or hand off back out** merely because another provider's quota resets.

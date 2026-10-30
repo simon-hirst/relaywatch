@@ -8,6 +8,7 @@ from usage import paths_only, metrics_from_json
 from gemini_session import launch as launch_gemini, show as show_gemini, status as gemini_status, blocks_auto_handoff
 from gemini_usage import refresh as refresh_gemini_quota, read as read_gemini_quota, argon_weekly_only_pro
 from gemini_attention import warn_at_ten as warn_gemini_ten, check_visible as check_gemini_attention
+from gemini_startup import monitor as check_gemini_startup
 from runner import maybe_launch, check_worker_startup, explicit_codex, latest_worker, pid_running, tmux_exists, show_agent_window, mark_ready, ready_path, session_name, launch_lock, handoff_is_real
 from alerts import notify_pending_question, send_event, pending_question, is_auto_stall
 from capacity import check as capacity_check, state_path as capacity_state_path
@@ -279,6 +280,14 @@ def poll(root,config,*,enable_launch=False):
     if enable_launch:
         startup=check_worker_startup(root)
         if startup:messages.append(startup)
+        # A live tmux window alone does not prove Gemini received its task.
+        # Only issue a one-time recovery on an explicitly empty managed TUI,
+        # never while working/asking a question, and notify if unverified.
+        try:
+            delivery=check_gemini_startup(root,config)
+            if delivery:messages.append(delivery)
+        except Exception as exc:
+            messages.append('GEMINI INITIAL HANDOFF CHECK ERROR: '+type(exc).__name__)
     return messages
 
 
@@ -573,7 +582,9 @@ def main():
             note='Weekly-only (Pro) — no separate Argon five-hour quota in this account response.'
         else:
             note='Only Argon-group buckets count toward Argon; unreported 5h remains unknown.'
+        from gemini_startup import receipt_path
         print(json.dumps({'session':gemini_status(ROOT),
+                          'initial_handoff':load_json(receipt_path(ROOT),{}) or {},
                           'quota':quota,
                           'note':note},indent=2))
         return

@@ -27,6 +27,7 @@ from engine import atomic_write_json, load_json
 from gemini_session import (gemini_session_name, record_path, blocks_auto_handoff)
 from runner import latest_worker, session_name
 from gemini_usage import read as read_quota
+from gemini_startup import hook as startup_hook
 from pause_control import paused
 
 RETRY_SECONDS = 120
@@ -286,6 +287,13 @@ def check_visible(root,config, *, now=None, run=subprocess.run,
 
 def handle(root, config, event, payload, *, active=blocks_auto_handoff,
            sender=send_event):
+    if event in ('SessionStart','PreInvocation'):
+        # SessionStart means the CLI initialized, but ONLY PreInvocation
+        # proves the first model call actually began.
+        try:
+            startup_hook(root,event,payload)
+        except Exception:
+            pass
     if event=='PreToolUse':
         try:
             notify_question(root,config,payload,active=active,sender=sender)
@@ -305,7 +313,7 @@ def handle(root, config, event, payload, *, active=blocks_auto_handoff,
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--project',required=True,type=Path)
-    parser.add_argument('--event',required=True,choices=('PreToolUse','PostToolUse','PreInvocation'))
+    parser.add_argument('--event',required=True,choices=('SessionStart','PreToolUse','PostToolUse','PreInvocation'))
     args=parser.parse_args()
     try:
         raw=sys.stdin.read(256*1024+1)

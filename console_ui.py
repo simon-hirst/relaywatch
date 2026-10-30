@@ -9,6 +9,7 @@ from pathlib import Path
 from model_picker import saved
 from gemini_session import cli_path
 from gemini_usage import read as read_gemini_quota, argon_weekly_only_pro
+from gemini_startup import receipt_path
 from reset_times import local_timezone, format_reset_local
 from pause_control import paused
 from engine import load_json
@@ -243,6 +244,13 @@ class DashboardUI(ConsoleUI):
         if paused(self.root):
             return ('PAUSED BY USER — automation disabled; use -Command resume to continue','yellow')
         if self.gemini_active:
+            first=load_json(receipt_path(self.root),{}) or {}
+            if first.get('state')=='awaiting_first_invocation':
+                if first.get('alerted'):
+                    return ('Gemini initial handoff unverified — check terminal/phone alert; no duplicate sent','yellow')
+                if first.get('attempted'):
+                    return ('Gemini initial handoff submitted — awaiting model-invocation confirmation','yellow')
+                return ('Gemini initial prompt pending verification — RelayWatch will safely check idle TUI','yellow')
             quota=read_gemini_quota(self.root)
             argon=(quota.get('groups') or {}).get('Gemini 4 Argon',{})
             weekly=argon.get('weekly')

@@ -25,6 +25,7 @@ from alerts import send_event
 from capacity import clean as strip_ansi
 from engine import atomic_write_json, load_json
 from gemini_session import (gemini_session_name, record_path, blocks_auto_handoff)
+from runner import latest_worker, session_name
 from gemini_usage import read as read_quota
 from pause_control import paused
 
@@ -51,9 +52,19 @@ def warning_path(root):
 
 def _managed(root, *, active=blocks_auto_handoff):
     record=load_json(record_path(root),{}) or {}
-    return (record.get('agent')=='gemini'
-            and record.get('session')==gemini_session_name(root)
-            and record.get('outcome')=='launched'
+    if record.get('agent')!='gemini' or record.get('outcome')!='launched':
+        return False
+    if record.get('session')==gemini_session_name(root):
+        return bool(active(root))
+    # Automatic fallback uses the existing Claude/Codex managed tmux session.
+    # Never notify on a stale record for an earlier worker/window.
+    worker=latest_worker(root)
+    return (record.get('session')==session_name(root)
+            and worker.get('session')==session_name(root)
+            and worker.get('agent')=='gemini'
+            and worker.get('type')=='tmux'
+            and worker.get('outcome')=='launched'
+            and worker.get('window')==record.get('window')
             and bool(active(root)))
 
 

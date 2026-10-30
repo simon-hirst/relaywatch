@@ -241,8 +241,10 @@ def poll(root,config,*,enable_launch=False):
             recovered=capacity_check(root,config,usages)
             if recovered:messages.append('CAPACITY RECOVERY '+recovered)
         except Exception as exc:messages.append('capacity recovery failed: '+type(exc).__name__+': '+str(exc))
-    # Gemini is opt-in and does not expose a verified machine-readable quota.
-    # Suspend Claude/Codex auto handoffs while an interactive Gemini TUI exists.
+    # The structured zero-turn Antigravity /usage response provides verified
+    # Argon WEEKLY quota for fallback eligibility. Enter Gemini only when
+    # Claude/Codex's source Stop handoff is complete and neither can resume;
+    # never automatically exit an active Gemini turn.
     # Poll the zero-token Antigravity /usage command at most once per
     # configured interval (default 120s). Failure never affects Claude/Codex
     # telemetry, permission decisions, or automated handoffs.

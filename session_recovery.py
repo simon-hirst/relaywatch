@@ -96,7 +96,7 @@ def recover_worker(root, *, run=None, walk=None, identify=None):
     root = Path(root).resolve()
     worker_file = wd(root)/'worker.json'
     old = load_json(worker_file,{}) or {}
-    if old.get('agent') in ('codex','claude'):
+    if old.get('agent') in ('codex','claude','gemini'):
         return None  # Existing state is not ours to rewrite automatically.
     evidence,reason=detect_managed_agent(root,run=run,walk=walk,identify=identify)
     if not evidence:return f'RECOVERY NOT APPLIED: {reason}'
@@ -104,7 +104,7 @@ def recover_worker(root, *, run=None, walk=None, identify=None):
     from runner import launch_lock
     with launch_lock(root):
         current=load_json(worker_file,{}) or {}
-        if current.get('agent') in ('claude','codex'):
+        if current.get('agent') in ('claude','codex','gemini'):
             return None
         worker={'type':'tmux','session':evidence['session'],
                 'agent':evidence['agent'],'window':evidence['window'],
@@ -133,6 +133,11 @@ def _active_cli_kind(argv):
         if arguments and arguments[0] in ('app-server', 'remote-control', 'mcp-server', 'completion', '--version', '-v', '--help', '-h'):
             return None
         return 'codex'
+    if executable in ('agy','agy.exe'):
+        # Poller commands (agy -p /usage, --version) are *not* interactive.
+        if arguments and arguments[0] in ('-p','--print','--version','-v','--help','-h','remote-control','models','update','doctor'):
+            return None
+        return 'gemini'
     if executable in ('claude', 'claude.exe'):
         # Claude's persistent background PTY host shares the repository cwd
         # but is not an interactive editing agent (e.g. `claude bg-pty-host`).
@@ -144,6 +149,14 @@ def _active_cli_kind(argv):
         # merely contains the string "codex" or "claude".
         script = argv[1].replace('\\', '/').lower()
         script_name = Path(script).name
+        # Some Agy installations re-exec through Node instead of retaining
+        # an "agy" executable in /proc. Match only known package-scoped CLI
+        # entrypoints, never arbitrary project files named cli.js.
+        if (('/antigravity-cli/' in script or '/@google/antigravity/' in script)
+                and script_name in ('cli.js','cli.mjs','index.js')):
+            if len(arguments)>1 and arguments[1] in ('-p','--print','--version','-v','--help','-h','remote-control','models','update','doctor'):
+                return None
+            return 'gemini'
         if script_name in ('codex', 'codex.js') or ('/@openai/codex/' in script and script_name in ('cli.js', 'codex.mjs')):
             if len(arguments) > 1 and arguments[1] in ('app-server', 'remote-control', 'mcp-server', 'completion', '--version', '-v', '--help', '-h'):
                 return None

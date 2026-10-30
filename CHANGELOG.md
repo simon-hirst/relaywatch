@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.22.0 — Automatic verified Gemini 4 Argon quota fallback (2026-10-30)
+
+- Fix the real Codex 05:43 UTC handoff gap: if neither Claude nor Codex has over 20% of its limiting quota available, resume the verified completed handoff with Gemini 4 Argon when its **own fresh weekly quota exceeds 10%** and `agy` is installed.
+- Launch Argon High/Medium as a full interactive `agy --remote-control -i` session in the existing managed Claude/Codex tmux session. Preserve attached Windows Terminal and phone Remote Control, with no competing coding processes.
+- Require an authentic source Stop-hook/ready marker, real handoff document, existing worker-window ownership and shared launch lock. Retire only the completed source window after creating and selecting the new receiving window; never kill an unverified or unrelated tmux session.
+- Verify new Gemini worker startup, recognise native and package-scoped Node Antigravity CLIs while excluding zero-token quota polling processes; retain existing Windows desktop and ntfy question/permission notifications and the exact **10% weekly-only handoff warning** (no Gemini warning at 20%).
+- Give a recovered Claude/Codex provider priority over Gemini; remain waiting if Argon quota is stale, missing, insufficient, or the CLI is unavailable. Users can disable the fallback with `auto_launch_gemini_fallback=false`; the parent `auto_launch_next_agent` remains required.
+- Safety boundary: the new feature enters Gemini automatically but does not force exit/return when Claude/Codex quotas recover. That still requires a separately verified completed Gemini handoff.
+- Add cross-platform tests for exhausted-provider fallback, correct model/terminal creation, stale/10% quota protection, ownership and pause checks, idempotence, CLI process identity, and ongoing ntfy warning compatibility.
+
 ## v3.21.0 — Antigravity phone alerts and weekly 10% handoff (2026-10-30)
 
 - Send managed Antigravity `ask_question` and `ask_permission` notifications through the existing Windows desktop and optional ntfy phone channels; avoid sending sensitive question arguments.

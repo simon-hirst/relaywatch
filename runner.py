@@ -199,10 +199,18 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
     from gemini_session import blocks_auto_handoff
     if blocks_auto_handoff(root):
         return 'not launched: Gemini interactive session is active; do not start another coding agent'
-    if target not in ('claude','codex'):return 'not launched: invalid receiving agent'
+    if target not in ('claude','codex','gemini'):return 'not launched: invalid receiving agent'
     if not handoff_is_real(root):return 'not launched: handoff is absent or still installer placeholder'
     if not isinstance(usage,dict) or usage.get('agent')!=target or usage.get('stale') or usage.get('stage') in ('unknown','handoff','prepare'):
-        return f'not launched: {target} quota unavailable or insufficient (>20% remaining required)'
+        return f'not launched: {target} quota unavailable or insufficient'
+    if target=='gemini':
+        # Fail closed on anything but the actual structured Argon weekly group.
+        from gemini_usage import read as read_gemini_quota
+        from gemini_session import automatic_eligible
+        if not automatic_eligible(read_gemini_quota(root)):
+            return 'not launched: Argon weekly quota missing/stale or at/below 10% remaining'
+    elif not isinstance(usage.get('remaining_percent'),(int,float)) or usage['remaining_percent']<=config.get('prepare_remaining_pct',20):
+        return f'not launched: {target} requires >20% verified quota remaining'
     if not event.get('event_id'):return 'not launched: invalid handoff event'
     with launch_lock(root):
         # A manual Gemini switch may race the quota poller: re-check ownership
@@ -227,26 +235,39 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
             if not authorized_switch:
                 return (f'not launched: interactive session {session} already exists; '
                         'attach to it or close it manually before retrying')
-        prompt_file=wd(root)/'next-agent-prompt.txt'
-        prompt_file.write_text(START_PROMPT+'\n',encoding='utf-8')
-        script=wd(root)/'interactive-agent.sh'
-        if not script.is_file():return 'not launched: interactive-agent.sh missing; reinstall v1.4'
-        if b'\r\n' in script.read_bytes():
-            return 'FAILED launcher preflight: CRLF detected in interactive-agent.sh; reinstall RelayWatch to restore Unix LF endings'
-        # Fail before reserving a tmux window if Git/Windows checkout converted
-        # the managed Bash entrypoint to CRLF (or if any syntax error exists).
-        # A syntactically broken launcher must never be reported as started.
-        try:
-            checked=fn(['bash','-n',str(script)],capture_output=True,text=True,timeout=6)
-        except (OSError,subprocess.TimeoutExpired) as exc:
-            return f'FAILED launcher preflight: {type(exc).__name__}: {exc}'
-        if checked.returncode:
-            return 'FAILED launcher preflight (bash -n): '+str(checked.stderr or checked.stdout or 'invalid Bash syntax')[:300]
-        # Bash login environment loads NVM/tool shims; the *outer* bash must
-        # survive a fast child exit, so the tmux window remains visible for
-        # diagnosis instead of disappearing before we can attach to it.
+        # All launches share one watchdog-owned tmux session and reuse its
+        # attached terminal; the source window is retired only after a
+        # verified Stop-hook event and a successful receiving-window creation.
         import shlex
-        inner='bash '+shlex.join([str(script),target,str(root),str(prompt_file)])
+        if target=='gemini':
+            from gemini_session import MODEL_IDS, auto_prompt, cli_path, automatic_eligible
+            from gemini_usage import read as read_gemini_quota
+            from model_picker import saved
+            if not automatic_eligible(read_gemini_quota(root)):
+                return 'not launched: Gemini quota went stale or below 10% before lock'
+            agy=cli_path()
+            if not agy:
+                return 'not launched: agy CLI is not installed in this WSL environment'
+            model_id=saved()['gemini']['model']
+            if model_id not in MODEL_IDS.values():
+                return 'not launched: invalid saved Gemini Argon model selection'
+            inner=('export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.bun/bin:$PATH"; '
+                   +shlex.quote(str(agy))+' --model '+shlex.quote(model_id)
+                   +' --remote-control -i '+shlex.quote(auto_prompt()))
+        else:
+            prompt_file=wd(root)/'next-agent-prompt.txt'
+            prompt_file.write_text(START_PROMPT+'\n',encoding='utf-8')
+            script=wd(root)/'interactive-agent.sh'
+            if not script.is_file():return 'not launched: interactive-agent.sh missing; reinstall v1.4'
+            if b'\r\n' in script.read_bytes():
+                return 'FAILED launcher preflight: CRLF detected in interactive-agent.sh; reinstall RelayWatch to restore Unix LF endings'
+            try:
+                checked=fn(['bash','-n',str(script)],capture_output=True,text=True,timeout=6)
+            except (OSError,subprocess.TimeoutExpired) as exc:
+                return f'FAILED launcher preflight: {type(exc).__name__}: {exc}'
+            if checked.returncode:
+                return 'FAILED launcher preflight (bash -n): '+str(checked.stderr or checked.stdout or 'invalid Bash syntax')[:300]
+            inner='bash '+shlex.join([str(script),target,str(root),str(prompt_file)])
         shell_command=(
             f'{inner}; rc=$?; '
             'printf "\\n[watchdog] Agent exited (status %s). Terminal retained for diagnostics.\\n" "$rc"; '
@@ -285,6 +306,13 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
                 'source_agent':event.get('source'),'handoff_created_at':event.get('created_at'),
                 'started_at':time.time(),'outcome':'launched','pid':None,'window':window,
                 'startup_status':'pending','startup_probe_started_at':time.time()}
+        if target=='gemini':
+            worker['model']=model_id
+            from gemini_session import record_path
+            atomic_write_json(record_path(root),{
+                'agent':'gemini','session':session,'window':window,
+                'type':'tmux','model':model_id,'started_at':worker['started_at'],
+                'quota':'monitored','outcome':'launched','automatic':True})
         atomic_write_json(wd(root)/'worker.json',worker)
         history[event['event_id']]={'target':target,'outcome':'launched','timestamp':worker['started_at'],'session':session}
         atomic_write_json(wd(root)/'launch-history.json',history)
@@ -368,12 +396,13 @@ def check_worker_startup(root, *, now=None, detector=None):
 
 
 def maybe_launch(root,config,usages,*,now=None):
-    """Resume the latest unhandled handoff as soon as EITHER provider has quota.
+    """Resume a verified Claude/Codex handoff to a healthy provider.
 
-    The opposite provider takes priority when both are ready on the same poll.
-    However, if the opposite is exhausted and the previous provider resets first,
-    the previous provider resumes its own handoff in a *new* managed tmux window.
-    Pending markers do not expire: e.g. both providers can reset overnight.
+    Prefer the other Claude/Codex provider, then a recovered original, then
+    verified Argon WEEKLY quota as a safe fallback (>10% remaining). Gemini
+    enters in the existing managed tmux session only after a verified Stop
+    event; neither unverified CLI sessions nor user pauses are interrupted.
+    Pending markers do not expire while all receivers lack quota.
     """
     if paused(root) or not config.get('auto_launch_next_agent',False):return None
     # An explicitly launched Gemini coding TUI owns this checkout until closed.
@@ -413,6 +442,16 @@ def maybe_launch(root,config,usages,*,now=None):
     event=max(candidates,key=lambda e:e['created_at'])
     source=event['source'];other='codex' if source=='claude' else 'claude'
     eligible=[a for a in (other,source) if can_resume(a,usages.get(a),config.get('prepare_remaining_pct',20))]
+    # Only fall back to Argon when neither Claude nor Codex can resume.
+    # This is deliberately asymmetric: their ordinary >20% resumption
+    # rule stays intact; Gemini has its OWN weekly-only >10% guard.
+    argon_snapshot=None
+    if not eligible and config.get('auto_launch_gemini_fallback',True):
+        from gemini_usage import read as read_gemini_quota
+        from gemini_session import automatic_eligible, cli_path
+        argon_snapshot=read_gemini_quota(root)
+        if automatic_eligible(argon_snapshot) and cli_path():
+            eligible=['gemini']
     pending_file=wd(root)/'pending-quota.json'
     if not eligible:
         # Remember the pending event for diagnostics across watchdog restarts,
@@ -423,12 +462,20 @@ def maybe_launch(root,config,usages,*,now=None):
                  'since':previous.get('since',now) if previous.get('event_id')==event['event_id'] else now}
         if previous.get('event_id')!=event['event_id'] or previous.get('status')!='waiting':
             atomic_write_json(pending_file,waiting)
-            return f'WAITING for quota: neither {other} nor {source} has >20% remaining; will resume whichever is ready first'
+            return (f'WAITING for quota: neither {other} nor {source} has >20% '
+                    'remaining and Argon is not verified/available with >10% weekly '
+                    'remaining; monitoring for a safe receiver')
         return None
     chosen=eligible[0]
     # The preferred recipient is normally the other agent; when that provider
     # has no quota, the reset original provider is a valid recipient too.
-    result=launch(root,config,{**event,'target':chosen,'verified_stop':True},usages[chosen])
+    if chosen=='gemini':
+        week=argon_snapshot['groups']['Gemini 4 Argon']['weekly']
+        usage={'agent':'gemini','stage':'normal','stale':False,
+               'remaining_percent':round(100*week['remaining_fraction'],4)}
+    else:
+        usage=usages[chosen]
+    result=launch(root,config,{**event,'target':chosen,'verified_stop':True},usage)
     if result.startswith('CREATED'):
         atomic_write_json(pending_file,{'event_id':event['event_id'],
                           'source':source,'resumed_by':chosen,'status':'resumed',

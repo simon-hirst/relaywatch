@@ -1,10 +1,10 @@
-"""Opt-in, conservative Antigravity CLI (Gemini 4 Argon) session support.
+"""Conservative interactive Antigravity CLI (Gemini 4 Argon) support.
 
-Google currently publishes model quotas through the interactive /usage panel,
-not a stable, documented machine-readable quota API. This module deliberately
-does NOT fabricate percentages or join the Claude/Codex automatic rotation.
-An explicit command opens an interactive managed Gemini session, only when
-no other managed TUI/process is running in this checkout.
+The verified zero-token /usage JSON provides weekly Argon quota, separately
+from general Gemini buckets. A finished Claude/Codex Stop-hook handoff may
+safely enter an interactive Gemini fallback in the existing managed tmux,
+but cannot force a running Gemini turn to stop when quotas reset.
+Manual launch-gemini remains isolated and refuses concurrent CLI sessions.
 """
 from __future__ import annotations
 import hashlib
@@ -40,6 +40,49 @@ def cli_path(*, which=shutil.which):
     return which('agy', path=path)
 
 
+def automatic_eligible(quota, *, min_weekly_remaining=10):
+    """Only a fresh, directly reported Argon weekly bucket can fund auto fallback.
+
+    Gemini has no assumed Pro five-hour limit. Never infer Argon availability
+    from the general Gemini or Antigravity Claude/GPT buckets.
+    """
+    if not isinstance(quota, dict) or quota.get('fresh') is not True:
+        return False
+    groups=quota.get('groups')
+    argon=groups.get('Gemini 4 Argon') if isinstance(groups, dict) else None
+    week=argon.get('weekly') if isinstance(argon, dict) else None
+    if not isinstance(week, dict):
+        return False
+    fraction=week.get('remaining_fraction')
+    return (isinstance(week.get('id'), str) and bool(week['id'])
+            and isinstance(week.get('reset_time'), str) and bool(week['reset_time'])
+            and isinstance(fraction, (int,float)) and not isinstance(fraction,bool)
+            and min_weekly_remaining/100 < fraction <= 1)
+
+
+def auto_prompt():
+    """Agent instructions for a *verified* Claude/Codex Stop-hook handoff."""
+    return (
+        'AUTOMATIC RELAYWATCH QUOTA HANDOFF to Gemini 4 Argon. Claude and '
+        'Codex currently lack sufficient quota; the source agent completed '
+        'its verified handoff. Read AGENTS.md, CLAUDE.md, docs/WORKFLOW.md, '
+        'and docs/HANDOFF.md first. Check Git status and actual files, then '
+        'give a concise takeover briefing and CONTINUE WITH NEXT SAFE TASK. '
+        'Complete authorized local implementation and tests without waiting '
+        'for Claude/Codex quotas merely to save Gemini quota. Respect all '
+        'existing operational and user approval requirements. Never infer '
+        'approval for commits, pushes, deployments or production changes. '
+        'RelayWatch monitors the separate Argon WEEKLY quota. There is NO '
+        '20% Gemini preparation warning. At 10% weekly remaining or below, '
+        'write a verified docs/HANDOFF.md plus dated docs/session-reports/ '
+        'summary at the next safe checkpoint; do not switch or exit until '
+        'safe work is saved. Keep Remote Control on for phone questions. '
+        'Do not terminate the managed session or interrupt active work '
+        'because Claude or Codex quotas reset. A return handoff requires '
+        'a separate verified Gemini completion; never auto-approve prompts.'
+    )
+
+
 def gemini_session_name(root):
     suffix = hashlib.sha256(str(Path(root).resolve()).encode()).hexdigest()[:10]
     return f'agent-gemini-{suffix}'
@@ -52,6 +95,18 @@ def record_path(root):
 def status(root, *, has_session=tmux_exists):
     record = load_json(record_path(root), {}) or {}
     name = gemini_session_name(root)
+    # Automatic fallback joins the existing shared Claude/Codex session so
+    # its attached Windows Terminal follows the new Gemini window. Manual
+    # launch-gemini retains the original dedicated session.
+    worker=latest_worker(root)
+    shared=session_name(root)
+    if (worker.get('agent')=='gemini' and worker.get('session')==shared
+            and worker.get('type')=='tmux' and worker.get('outcome')=='launched'):
+        live=has_session(shared)
+        return {'state':'tmux session present' if live else 'tmux session absent',
+                'model':record.get('model') or worker.get('model'),
+                'window':worker.get('window'),'session':shared,
+                'quota':'monitored', 'running':live, 'automatic':True}
     if record.get('session') != name:
         return {'state': 'not started', 'quota': 'unknown'}
     live = has_session(name)
@@ -140,6 +195,11 @@ def launch(root, config, *, model=DEFAULT_MODEL, invoke=None, which=None,
 
 
 def show(root, config, *, force=True, invoke=None):
+    worker=latest_worker(root)
+    if (worker.get('agent')=='gemini' and worker.get('session')==session_name(root)
+            and worker.get('outcome')=='launched'):
+        return show_agent_window(root, config, 'gemini', force=force,
+                                 invoke=invoke)
     name = gemini_session_name(root)
     if not tmux_exists(name, invoke=invoke or subprocess.run):
         return 'NOT OPENED: no managed Gemini tmux session exists'
@@ -148,11 +208,16 @@ def show(root, config, *, force=True, invoke=None):
 
 
 def blocks_auto_handoff(root, *, invoke=None):
-    """An active Gemini tmux session must block Claude/Codex automatic launches.
+    """Any running manual or automatic Gemini session owns this checkout.
 
-    Do not inspect tmux on projects that have never explicitly launched Gemini.
-    This preserves the existing two-provider code path and older test mocks.
+    Do not inspect tmux on projects without a Gemini worker record. A
+    shared-session worker is recognized by exact project/session identity.
     """
+    worker=latest_worker(root)
+    shared=session_name(root)
+    if (worker.get('agent')=='gemini' and worker.get('session')==shared
+            and worker.get('type')=='tmux' and worker.get('outcome')=='launched'):
+        return tmux_exists(shared,invoke=invoke)
     record = load_json(record_path(root), {}) or {}
     session = gemini_session_name(root)
     return bool(record.get('session') == session and

@@ -123,7 +123,14 @@ Gemini while another managed coding session or process is still active.
 .\watchdog-windows.ps1 -ProjectPath "C:\path\to\project" -Command gemini-status
 ```
 
-Use `-GeminiModel medium` for the medium-thinking variant. The managed
+Use `-GeminiModel medium` to override the saved selection. Otherwise,
+press **Shift+M** in the RelayWatch dashboard (or run
+`watchdog-windows.ps1 -Command models`) to choose Argon High or Medium for
+the next **manual** Gemini launch. The dashboard always displays Gemini:
+"agy missing in WSL", "CLI found, sign-in unverified" or "session active".
+It does not claim account access or quota from an executable check.
+
+The managed
 `agy` session opens with `--remote-control` and a handoff-reading initial
 prompt. It is **interactive**, stays in a separately named tmux session, and
 preserves the terminal for diagnostics when `agy` exits. The agent is not

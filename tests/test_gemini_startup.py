@@ -38,6 +38,8 @@ class GeminiStartupDeliveryTests(unittest.TestCase):
         self.payload={'workspacePaths':[str(self.root)],
                       'modelName':'gemini-4-argon-high',
                       'conversationId':'abc','invocationNum':0}
+        # Native SessionStart proves this *new* CLI loaded workspace hooks.
+        gs.hook(self.root,'SessionStart',self.payload,now=1001)
         self.commands=[]
         self.notifications=[]
         self.sender=lambda _root,_cfg,title,desktop,phone: (
@@ -161,6 +163,14 @@ class GeminiStartupDeliveryTests(unittest.TestCase):
         self.assertIn('UNVERIFIED',self.monitor('Antigravity\nType a message',now=1080))
         self.assertEqual(load_json(gs.receipt_path(self.root))['event_id'],self.event)
         self.assertEqual(self.notifications[0][0],'Antigravity initial handoff needs attention')
+        self.assertFalse(any(cmd[1]=='send-keys' for cmd in self.commands))
+
+    def test_without_native_sessionstart_does_not_type_into_unknown_cli(self):
+        state=load_json(gs.receipt_path(self.root))
+        state.pop('session_seen_at',None)
+        atomic_write_json(gs.receipt_path(self.root),state)
+        self.assertIsNone(self.monitor('Antigravity\nType a message',now=1040))
+        self.assertIn('UNVERIFIED',self.monitor('Antigravity\nType a message',now=1080))
         self.assertFalse(any(cmd[1]=='send-keys' for cmd in self.commands))
 
     def test_gate_rejects_other_event_and_worker(self):

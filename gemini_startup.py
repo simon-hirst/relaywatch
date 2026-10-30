@@ -65,6 +65,37 @@ def start(root, *, event_id, session, window, now=None):
     return when
 
 
+def gate(root,event_id,*,timeout=20):
+    """Ensure worker/receipt ownership exists before launching the Agy CLI.
+
+    This removes the race where PreInvocation fires before RelayWatch has
+    written worker.json, causing a genuine first turn to go unacknowledged.
+    """
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        state=load_json(receipt_path(root),{}) or {}
+        worker=latest_worker(root)
+        if (state.get('event_id')==event_id
+                and worker.get('event_id')==event_id
+                and worker.get('agent')=='gemini'
+                and worker.get('window')==state.get('window')
+                and worker.get('session')==state.get('session')):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def main():
+    import argparse
+    parser=argparse.ArgumentParser()
+    parser.add_argument('command',choices=('gate',))
+    parser.add_argument('--project',type=Path,required=True)
+    parser.add_argument('--event-id',required=True)
+    args=parser.parse_args()
+    if args.command=='gate':
+        raise SystemExit(0 if gate(args.project,args.event_id) else 2)
+
+
 def _matches(root,payload):
     if not isinstance(payload,dict):
         return False
@@ -224,3 +255,7 @@ def monitor(root,config, *, now=None, run=subprocess.run,
             atomic_write_json(receipt_path(root),state)
         return 'GEMINI INITIAL HANDOFF UNVERIFIED: notified desktop/phone; no unsafe duplicate sent'
     return None
+
+
+if __name__=='__main__':
+    main()

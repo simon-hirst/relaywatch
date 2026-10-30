@@ -4,7 +4,7 @@ param(
   [switch]$AutoUpdate,
   [ValidateSet('run','once','status','inspect','launch-codex','launch-gemini','show-gemini','gemini-status','ready','recover-session','show','notify-test','notify-setup','models','model-status','pause','resume','resume-check','unpause','daybreak-continue','daybreak-restored','daybreak-status')][string]$Command = 'run',
   [ValidateSet('claude','codex')][string]$Agent = 'claude',
-  [ValidateSet('high','medium')][string]$GeminiModel = 'high',
+  [ValidateSet('high','medium')][string]$GeminiModel,
   [switch]$Retry,
   [switch]$ConfirmComplete,
   [switch]$AllowStaleHandoff
@@ -23,7 +23,7 @@ $extraArgs = @()
 if ($Retry) { $extraArgs += '--retry' }
 if ($ConfirmComplete) { $extraArgs += '--confirm-complete' }
 if ($AllowStaleHandoff) { $extraArgs += '--allow-stale-handoff' }
-if ($Command -eq 'launch-gemini') { $extraArgs += @('--gemini-model', $GeminiModel) }
+if ($Command -eq 'launch-gemini' -and $PSBoundParameters.ContainsKey('GeminiModel')) { $extraArgs += @('--gemini-model', $GeminiModel) }
 if ($AutoUpdate) {
   if ($Command -ne 'run') { throw '-AutoUpdate supports -Command run only.' }
   & wsl.exe -d $Distro -- python3 "$wslProject/.agent-watchdog/update_supervisor.py" --project $wslProject

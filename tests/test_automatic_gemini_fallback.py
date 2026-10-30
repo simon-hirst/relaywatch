@@ -179,6 +179,12 @@ class AutomaticArgonFallbackTests(unittest.TestCase):
         self.assertIsNone(_active_cli_kind(['agy','--version']))
         self.assertIsNone(_active_cli_kind(['agy','remote-control','start']))
         self.assertIsNone(_active_cli_kind(['agy','models']))
+        self.assertEqual(_active_cli_kind(['node','/home/simon/.local/share/antigravity-cli/cli.js',
+                                          '--model','gemini-4-argon-high']),'gemini')
+        self.assertIsNone(_active_cli_kind(['node','/home/simon/.local/share/antigravity-cli/cli.js',
+                                          '-p','/usage']))
+        self.assertIsNone(_active_cli_kind(['node','/project/lib/cli.js',
+                                          '--model','something']))
 
 
 if __name__=='__main__':

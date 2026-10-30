@@ -118,7 +118,7 @@ def wsl_host():
     return 'microsoft' in os.uname().release.lower() or bool(os.environ.get('WSL_DISTRO_NAME'))
 
 
-def show_agent_window(root, config, agent=None, *, force=False, invoke=None):
+def show_agent_window(root, config, agent=None, *, force=False, invoke=None, session_override=None):
     """Attach a visible *new Windows Terminal* to the existing tmux session.
 
     This does not launch a second agent. Auto mode skips opening a duplicate
@@ -127,7 +127,9 @@ def show_agent_window(root, config, agent=None, *, force=False, invoke=None):
     if Windows Terminal, WSL interop or GUI startup is unavailable.
     """
     root=Path(root).resolve()
-    session=session_name(root)
+    session=session_override or session_name(root)
+    if session_override and session_override != 'agent-gemini-'+hashlib.sha256(str(root).encode()).hexdigest()[:10]:
+        return 'window not opened: invalid Gemini managed session'
     if not tmux_exists(session,invoke=invoke):
         return f'window not opened: tmux session {session} does not exist'
     if not force and not config.get('auto_open_terminal_window',True):
@@ -157,7 +159,7 @@ def show_agent_window(root, config, agent=None, *, force=False, invoke=None):
     script=wd(root)/'open-agent-window.ps1'
     if not script.is_file():return 'window not opened: open-agent-window.ps1 missing; reinstall v1.5'
     agent=agent or latest_worker(root).get('agent','codex')
-    if agent not in ('claude','codex'):
+    if agent not in ('claude','codex','gemini'):
         return 'window not opened: cannot determine active agent'
     run=invoke or subprocess.run
     try:
@@ -367,6 +369,10 @@ def maybe_launch(root,config,usages,*,now=None):
     Pending markers do not expire: e.g. both providers can reset overnight.
     """
     if paused(root) or not config.get('auto_launch_next_agent',False):return None
+    # An explicitly launched Gemini coding TUI owns this checkout until closed.
+    # Never start a Claude/Codex handoff concurrently, even if an old marker exists.
+    from gemini_session import blocks_auto_handoff
+    if blocks_auto_handoff(root):return None
     now=time.time() if now is None else now
     root=Path(root)
     handoff=root/'docs'/'HANDOFF.md'

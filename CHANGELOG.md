@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.20.1 — Gemini 4 Argon Pro weekly-only label (2026-10-30)
+
+- Display **Weekly-only (Pro)** instead of an unexplained unknown Argon 5-hour allowance when verified Antigravity usage has the Pro-specific `gemini-argon-wtu-weekly` bucket and no separate Argon 5-hour bucket.
+- Keep the existing unknown label for other account layouts and show a true five-hour figure only when the Argon group explicitly reports one.
+- Apply the label consistently to the live dashboard, active-agent status and `gemini-status`, with regression tests.
+- Preserve Claude/Codex handoffs and all usage parsing, authentication, session and notification behaviour.
+
 ## v3.20.0 — Verified Antigravity Gemini quota monitoring (2026-10-30)
 
 - Poll the authenticated Antigravity CLI (agy 1.1.12+) with the structured zero-turn, zero-token `-p /usage --output-format json` command, normally at most every 120 seconds.

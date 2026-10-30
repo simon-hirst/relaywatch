@@ -205,6 +205,10 @@ def launch(root,config,event,usage,*,allow_existing_event=False,invoke=None):
         return f'not launched: {target} quota unavailable or insufficient (>20% remaining required)'
     if not event.get('event_id'):return 'not launched: invalid handoff event'
     with launch_lock(root):
+        # A manual Gemini switch may race the quota poller: re-check ownership
+        # under the shared lock before touching any tmux pane.
+        if blocks_auto_handoff(root):
+            return 'not launched: Gemini interactive session appeared; refusing a concurrent coding agent'
         history=load_json(wd(root)/'launch-history.json',{}) or {}
         if event['event_id'] in history and not allow_existing_event:
             return 'not launched: this handoff event has already been handled'

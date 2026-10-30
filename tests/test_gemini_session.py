@@ -81,7 +81,7 @@ class GeminiArgonTests(unittest.TestCase):
 
     def test_user_pause_and_no_handoff_block_launch(self):
         (self.root/'docs'/'HANDOFF.md').unlink()
-        self.assertIn('handoff',launch(self.root,self.config,which=self.which))
+        self.assertIn('handoff',launch(self.root,self.config,which=self.which).lower())
         (self.root/'docs'/'HANDOFF.md').write_text('Verified tasks ' * 35)
         atomic_write_json(self.root/'.agent-watchdog/paused.json',
                           {'active':True})

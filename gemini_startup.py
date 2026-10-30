@@ -234,11 +234,13 @@ def monitor(root,config, *, now=None, run=subprocess.run,
     # composer. Otherwise leave the UI untouched and alert after grace.
     if (not state.get('attempted') and not state.get('alerted')
             and not state.get('adopted_running_session')
+            and state.get('session_seen_at')
             and age>=WAIT_BEFORE_RESCUE):
         with launch_lock(root):
             state=load_json(receipt_path(root),{}) or {}
             worker=latest_worker(root)
             if (state.get('state')=='confirmed' or state.get('attempted')
+                    or not state.get('session_seen_at')
                     or state.get('alerted')
                     or worker.get('event_id')!=state.get('event_id')
                     or worker.get('window')!=state.get('window')

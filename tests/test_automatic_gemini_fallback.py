@@ -77,7 +77,8 @@ class AutomaticArgonFallbackTests(unittest.TestCase):
         self.assertEqual(command[command.index('-n')+1],'gemini')
         shell=command[-1]
         self.assertIn('agy',shell)
-        self.assertIn('gemini-4-argon-high --remote-control -i ',shell)
+        self.assertIn('gemini-4-argon-high --remote-control ',shell)
+        self.assertNotIn(' --remote-control -i ',shell)
         self.assertIn('docs/HANDOFF.md',shell)
         self.assertNotIn(' --print',shell)
         self.assertIn('exec bash -i',shell)

@@ -6,7 +6,7 @@ from pathlib import Path
 from engine import PROMPT_HANDOFF, PROMPT_PREP, load_json, atomic_write_json, update, state_path, current, handoff_current
 from usage import paths_only, metrics_from_json
 from gemini_session import launch as launch_gemini, show as show_gemini, status as gemini_status, blocks_auto_handoff
-from gemini_usage import refresh as refresh_gemini_quota, read as read_gemini_quota
+from gemini_usage import refresh as refresh_gemini_quota, read as read_gemini_quota, argon_weekly_only_pro
 from runner import maybe_launch, check_worker_startup, explicit_codex, latest_worker, pid_running, tmux_exists, show_agent_window, mark_ready, ready_path, session_name, launch_lock, handoff_is_real
 from alerts import notify_pending_question, send_event, pending_question, is_auto_stall
 from capacity import check as capacity_check, state_path as capacity_state_path
@@ -552,9 +552,14 @@ def main():
         return
     if args.command=='gemini-status':
         quota=refresh_gemini_quota(ROOT,config,force=True)
+        argon=(quota.get('groups') or {}).get('Gemini 4 Argon',{})
+        if quota.get('fresh') and argon_weekly_only_pro(argon):
+            note='Weekly-only (Pro) — no separate Argon five-hour quota in this account response.'
+        else:
+            note='Only Argon-group buckets count toward Argon; unreported 5h remains unknown.'
         print(json.dumps({'session':gemini_status(ROOT),
                           'quota':quota,
-                          'note':'Only buckets within Gemini 4 Argon belong to Argon; absent 5h is unknown.'},indent=2))
+                          'note':note},indent=2))
         return
     if args.command=='launch-codex':
         from engine import current

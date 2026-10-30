@@ -120,6 +120,18 @@ def parse(output):
     return parsed
 
 
+def argon_weekly_only_pro(argon):
+    """Recognise the specific Pro Argon weekly-only layout actually reported.
+
+    The general Gemini 5h bucket must never be inferred as Argon's.
+    Other account layouts remain unknown unless their own Argon 5h exists.
+    """
+    if not isinstance(argon, dict) or '5h' in argon:
+        return False
+    weekly = argon.get('weekly')
+    return isinstance(weekly, dict) and weekly.get('id') == 'gemini-argon-wtu-weekly'
+
+
 def read(root, *, now=None):
     now=time.time() if now is None else now
     state=load_json(path(root), {}) or {}

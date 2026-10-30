@@ -137,18 +137,40 @@ class GeminiQuotaTests(unittest.TestCase):
                          'gemini-argon-wtu-weekly')
         self.assertFalse(gu.read(self.root,now=1301)['fresh'])
 
-    def test_dashboard_weekly_is_observed_five_hour_unknown(self):
+    def test_dashboard_labels_pro_argon_as_weekly_only(self):
         gu.refresh(self.root,now=1000,run=self.run,locate=lambda:'/fake/agy')
         with patch('console_ui.cli_path',return_value='/fake/agy'), \
              patch('console_ui.read_gemini_quota',return_value=gu.read(self.root,now=1100)):
             ui=DashboardUI(self.root)
             rows=ui._lines(125)
             all_lines='\n'.join(text for text,_ in rows)
-        self.assertIn('GEMINI',all_lines)
-        self.assertIn('weekly 1.1% used',all_lines)
-        self.assertIn('98.9% left',all_lines)
-        self.assertIn('Argon 5H  not reported',all_lines)
-        self.assertNotIn('Argon 5H  0.0% used',all_lines)
+            self.assertIn('GEMINI',all_lines)
+            self.assertIn('weekly 1.1% used',all_lines)
+            self.assertIn('98.9% left',all_lines)
+            self.assertIn('Weekly-only (Pro)',all_lines)
+            self.assertNotIn('Argon 5H  0.0% used',all_lines)
+            ui.gemini_active=True
+            pending=ui._pending()[0]
+            self.assertIn('Weekly-only (Pro)',pending)
+
+    def test_different_account_quota_layout_not_mislabeled_pro(self):
+        group=gu.parse(example())['Gemini 4 Argon']
+        self.assertTrue(gu.argon_weekly_only_pro(group))
+        unknown={'weekly': {**group['weekly'], 'id':'different-plan-weekly'}}
+        self.assertFalse(gu.argon_weekly_only_pro(unknown))
+        other={**group, '5h':{**gu.parse(example())['Gemini Models']['5h'],
+                               'used_percent':23.0, 'remaining_percent':77.0}}
+        self.assertFalse(gu.argon_weekly_only_pro(other))
+        with patch('console_ui.read_gemini_quota',return_value={
+            'fresh':True,'groups':{'Gemini 4 Argon':unknown}}):
+            lines='\n'.join(text for text,_ in DashboardUI(self.root)._lines(125))
+            self.assertIn('Argon 5H  not reported',lines)
+            self.assertNotIn('Weekly-only (Pro)',lines)
+        with patch('console_ui.read_gemini_quota',return_value={
+            'fresh':True,'groups':{'Gemini 4 Argon':other}}):
+            lines='\n'.join(text for text,_ in DashboardUI(self.root)._lines(125))
+            self.assertIn('Argon 5H',lines)
+            self.assertNotIn('Weekly-only (Pro)',lines)
 
     def test_install_copies_and_hashes_quota_module_and_ignores_cache(self):
         import hashlib

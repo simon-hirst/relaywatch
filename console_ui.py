@@ -8,7 +8,7 @@ import os,select,sys,termios,tty,subprocess,shutil,re
 from pathlib import Path
 from model_picker import saved
 from gemini_session import cli_path
-from gemini_usage import read as read_gemini_quota
+from gemini_usage import read as read_gemini_quota, argon_weekly_only_pro
 from reset_times import local_timezone, format_reset_local
 from pause_control import paused
 from engine import load_json
@@ -244,9 +244,16 @@ class DashboardUI(ConsoleUI):
             return ('PAUSED BY USER — automation disabled; use -Command resume to continue','yellow')
         if self.gemini_active:
             quota=read_gemini_quota(self.root)
-            weekly=(quota.get('groups') or {}).get('Gemini 4 Argon',{}).get('weekly')
+            argon=(quota.get('groups') or {}).get('Gemini 4 Argon',{})
+            weekly=argon.get('weekly')
             if quota['fresh'] and weekly:
-                return (f'Gemini active — Argon weekly {weekly["remaining_percent"]:.1f}% left; Argon 5H unknown','cyan')
+                if argon_weekly_only_pro(argon):
+                    detail='Weekly-only (Pro)'
+                elif argon.get('5h'):
+                    detail=f'Argon 5H {argon["5h"]["remaining_percent"]:.1f}% left'
+                else:
+                    detail='Argon 5H not reported'
+                return (f'Gemini active — Argon weekly {weekly["remaining_percent"]:.1f}% left; {detail}','cyan')
             return ('Gemini active — quota unavailable or stale; manual /usage recommended','yellow')
         worker=load_json(self.root/'.agent-watchdog'/'worker.json',{}) or {}
         if worker.get('startup_status')=='failed':
@@ -361,6 +368,8 @@ class DashboardUI(ConsoleUI):
             if five_hour:
                 rows.append(('          Argon 5H  '+f'{five_hour["used_percent"]:.1f}% used'
                             +f'  {five_hour["remaining_percent"]:.1f}% left', 'dim'))
+            elif argon_weekly_only_pro(argon):
+                rows.append(('          Weekly-only (Pro)  •  no separate Argon 5H quota', 'dim'))
             else:
                 rows.append(('          Argon 5H  not reported by agy /usage (unknown)', 'dim'))
         elif cli_path():
